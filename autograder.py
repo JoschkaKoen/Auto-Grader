@@ -18,11 +18,13 @@ Requirements:
 
 Usage:
     python fix_scanned_pdf.py input.pdf output.pdf
-    python fix_scanned_pdf.py input.pdf output.pdf --dpi 300 --blank-threshold 250 --blank-std 5
+    python fix_scanned_pdf.py input.pdf output.pdf --dpi 300 --blank-threshold 250 --blank-std 6
 """
 
 import argparse
+import os
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import numpy as np
@@ -36,7 +38,8 @@ from PIL import Image
 # Configuration defaults
 # ---------------------------------------------------------------------------
 
-ANALYSIS_DPI = 300          # DPI for rendering pages for OSD / blank detection only.
+ANALYSIS_DPI = 300          # DPI for rendering pages for OSD detection only.
+BLANK_DPI = 72              # Low DPI for fast blank-page detection.
 BLANK_MEAN_THRESHOLD = 250  # Pages with grayscale mean above this are considered blank (0-255)
 BLANK_STD_THRESHOLD = 6     # Pages with grayscale std below this are considered blank
 
@@ -59,14 +62,11 @@ def detect_rotation(image: Image.Image) -> int:
         confidence = float(osd.get("orientation_conf", 0))
 
         if confidence < 2.0:
-            print(f"    OSD confidence too low ({confidence:.1f}), keeping as-is")
             return 0
 
-        print(f"    OSD: rotate={angle}°, confidence={confidence:.1f}")
         return angle
 
-    except pytesseract.TesseractError as e:
-        print(f"    OSD failed ({e}), keeping as-is")
+    except pytesseract.TesseractError:
         return 0
 
 
@@ -78,12 +78,22 @@ def is_blank_page(image: Image.Image,
     Uses both mean brightness and standard deviation of a grayscale version.
     A very high mean (bright) AND very low std (uniform) = blank.
     """
-    gray = np.array(image.convert("L"), dtype=np.float32)
+    gray_img = image if image.mode == "L" else image.convert("L")
+    gray = np.array(gray_img, dtype=np.float32)
     mean = gray.mean()
     std = gray.std()
-    blank = (mean >= mean_threshold) and (std <= std_threshold)
-    print(f"    Pixel stats: mean={mean:.1f}, std={std:.1f} → {'BLANK' if blank else 'content'}")
-    return blank
+    return (mean >= mean_threshold) and (std <= std_threshold)
+
+
+def _osd_worker(page_num: int, input_path: str, dpi: int) -> tuple[int, int]:
+    """
+    Worker for parallel OSD: renders a single page at full DPI and detects rotation.
+    Returns (page_num, angle).
+    """
+    images = convert_from_path(input_path, dpi=dpi,
+                               first_page=page_num, last_page=page_num)
+    angle = detect_rotation(images[0])
+    return (page_num, angle)
 
 
 def process_pdf(input_path: str,
@@ -100,56 +110,84 @@ def process_pdf(input_path: str,
         sys.exit(1)
 
     print(f"\nProcessing: {input_path}")
-    print(f"Analysis DPI: {analysis_dpi}  |  Blank thresholds: mean≥{blank_mean}, std≤{blank_std}\n")
+    print(f"Analysis DPI: {analysis_dpi}  |  Blank thresholds: mean≥{blank_mean}, std≤{blank_std}")
 
-    # Open the original PDF — we will copy/rotate pages without re-encoding
-    src_pdf = pikepdf.open(str(input_path))
-    total_pages = len(src_pdf.pages)
+    # ------------------------------------------------------------------
+    # Pass 1: Fast blank detection at low DPI
+    # ------------------------------------------------------------------
+    print(f"\nPass 1: Rendering all pages at {BLANK_DPI} DPI for blank detection...")
+    low_res_pages = convert_from_path(str(input_path), dpi=BLANK_DPI,
+                                      grayscale=True, thread_count=4)
+    total_pages = len(low_res_pages)
+    print(f"Total pages: {total_pages}")
 
-    # Render pages at analysis DPI only for blank/orientation detection
-    rendered = convert_from_path(str(input_path), dpi=analysis_dpi)
-    print(f"Total pages in input: {total_pages}\n")
+    content_page_nums = []  # 1-indexed page numbers
+    blank_page_nums = []
 
-    out_pdf = pikepdf.new()
-    kept = 0
-
-    for i, page_img in enumerate(rendered):
+    for i, page_img in enumerate(low_res_pages):
         page_num = i + 1
-        print(f"Page {page_num}/{total_pages}")
-
-        # --- Blank page check ---
         if is_blank_page(page_img, blank_mean, blank_std):
-            print(f"  → Removing blank page\n")
-            continue
-
-        # --- Orientation detection ---
-        angle = detect_rotation(page_img)
-
-        # Copy the original page (preserves embedded images byte-for-byte)
-        src_page = src_pdf.pages[i]
-
-        if angle != 0:
-            # Apply rotation at the PDF level via /Rotate attribute.
-            # pdf2image already applies the existing /Rotate when rendering,
-            # so Tesseract's angle is relative to the currently-displayed view.
-            # PDF /Rotate is clockwise; Tesseract's angle is CCW correction needed.
-            # Adding the CCW angle as a CW value to /Rotate achieves the correction.
-            existing_rotate = int(src_page.get("/Rotate", 0))
-            new_rotate = (existing_rotate + angle) % 360
-            src_page["/Rotate"] = new_rotate
-            print(f"  → Set PDF /Rotate to {new_rotate}° (was {existing_rotate}°)")
+            blank_page_nums.append(page_num)
         else:
-            print(f"  → No rotation needed")
+            content_page_nums.append(page_num)
 
-        out_pdf.pages.append(src_page)
-        kept += 1
-        print()
+    print(f"  → {len(blank_page_nums)} blank pages, {len(content_page_nums)} content pages")
 
-    if kept == 0:
+    # Free low-res images
+    del low_res_pages
+
+    if not content_page_nums:
         print("WARNING: All pages were removed (all blank?). Nothing to save.")
         sys.exit(1)
 
-    print(f"Pages retained: {kept}/{total_pages}")
+    # ------------------------------------------------------------------
+    # Pass 2: Parallel OSD at full DPI (content pages only)
+    # ------------------------------------------------------------------
+    num_workers = min(os.cpu_count() or 4, len(content_page_nums))
+    print(f"\nPass 2: Running OSD on {len(content_page_nums)} content pages "
+          f"at {analysis_dpi} DPI ({num_workers} workers)...")
+
+    rotation_map: dict[int, int] = {}
+    input_str = str(input_path)
+
+    with ThreadPoolExecutor(max_workers=num_workers) as executor:
+        futures = {
+            executor.submit(_osd_worker, pn, input_str, analysis_dpi): pn
+            for pn in content_page_nums
+        }
+        for future in as_completed(futures):
+            page_num, angle = future.result()
+            rotation_map[page_num] = angle
+
+    # ------------------------------------------------------------------
+    # Print summary
+    # ------------------------------------------------------------------
+    print(f"\nResults:")
+    for pn in sorted(rotation_map):
+        angle = rotation_map[pn]
+        status = f"rotate {angle}°" if angle != 0 else "ok"
+        print(f"  Page {pn:>3}: {status}")
+    for pn in sorted(blank_page_nums):
+        print(f"  Page {pn:>3}: blank (removed)")
+
+    # ------------------------------------------------------------------
+    # Build output PDF with pikepdf (lossless)
+    # ------------------------------------------------------------------
+    src_pdf = pikepdf.open(str(input_path))
+    out_pdf = pikepdf.new()
+
+    for pn in content_page_nums:
+        src_page = src_pdf.pages[pn - 1]  # 0-indexed
+        angle = rotation_map.get(pn, 0)
+
+        if angle != 0:
+            existing_rotate = int(src_page.get("/Rotate", 0))
+            new_rotate = (existing_rotate + angle) % 360
+            src_page["/Rotate"] = new_rotate
+
+        out_pdf.pages.append(src_page)
+
+    print(f"\nPages retained: {len(content_page_nums)}/{total_pages}")
     print(f"Saving to: {output_path}")
 
     out_pdf.save(str(output_path))
@@ -170,7 +208,7 @@ def main():
     parser.add_argument("input",  help="Path to input PDF")
     parser.add_argument("output", help="Path for output PDF")
     parser.add_argument("--dpi",  type=int,   default=ANALYSIS_DPI,
-                        help=f"Analysis render DPI for OSD/blank detection (default: {ANALYSIS_DPI})")
+                        help=f"OSD analysis DPI (default: {ANALYSIS_DPI})")
     parser.add_argument("--blank-threshold", type=float, default=BLANK_MEAN_THRESHOLD,
                         help=f"Grayscale mean above which a page is blank (default: {BLANK_MEAN_THRESHOLD})")
     parser.add_argument("--blank-std", type=float, default=BLANK_STD_THRESHOLD,

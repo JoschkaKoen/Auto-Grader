@@ -1,3 +1,7 @@
+# Secrets / local env
+.env
+.env.*
+
 # Local / generated
 .venv/
 __pycache__/
