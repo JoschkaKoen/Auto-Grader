@@ -255,6 +255,13 @@ LEFT COLUMN (middle-left area, approximately 20-45% from left edge, vertical arr
   
   ⚠️ CRITICAL: There are TWO separate Question 38s on the LEFT side - one at the TOP
      (q38_left_top) and one at the BOTTOM (q38_left_bottom). They have DIFFERENT answers!
+  
+  For Q39 on LEFT side (q39_left):
+  - Question: "Which statement about the life cycle of a star is correct?"
+  - Options A, B, C, D are arranged VERTICALLY one below the other
+  - A is at top, then B, then C, then D at bottom
+  - Look carefully for the circle/mark on the CORRECT option letter
+  - The mark might be on D (bottom option: "Most stars expand and form protostars")
 
 RIGHT COLUMN (middle-right area, approximately 55-80% from left edge, vertical arrangement):
   Position 1 (upper ~20-40% from top):    Question 39  → field: q39_right
@@ -387,6 +394,34 @@ Example 7 - Right side layout:
 Example 8 - Faint markings:
   [Image shows very light pencil marks]
   → Use your best judgment; if truly unreadable return "?" with low confidence
+
+Example 6 - Multiple Q38s on left side:
+  [Image shows Q38 at top-left and another Q38 at bottom-left]
+  → q38_left_top: "A", q38_left_bottom: "C" (these are DIFFERENT answers!)
+
+Example 7 - Right side layout:
+  [Image shows Q39 and Q40 on the right side]
+  → q39_right: "B", q40_right: "D" (remember: right side has NO Q38!)
+
+Example 8 - Faint markings:
+  [Image shows very light pencil marks]
+  → Use your best judgment; if truly unreadable return "?" with low confidence
+
+Example 9 - Checkmark/tick indicating D:
+  [Image shows checkmark ✓ or diagonal tick mark placed beside letter D, NOT a circle]
+  → q39_left: "D", q39_left_confidence: "high"
+  CRITICAL: A checkmark next to D means D is selected. Do not confuse with nearby letters.
+  The checkmark indicates which letter was chosen, even if it's not a full circle.
+
+Example 10 - B vs D confusion with checkmark:
+  [Image shows checkmark between options B and D, but closer to D]
+  → q39_left: "D", q39_left_confidence: "medium"
+  The checkmark position indicates the intended answer. When uncertain, mark as "?"
+
+Example 11 - Circle vs checkmark on same option:
+  [Image shows letter D with both a faint partial circle AND a clear checkmark]
+  → q39_left: "D", q39_left_confidence: "high"
+  The checkmark confirms D was selected. Multiple marking types on one letter = that letter.
 """
 
 
@@ -450,11 +485,11 @@ def call_gemini(client: genai.Client, image_bytes: bytes, page_num: int) -> dict
 
     # Typed config matches the API surface in types.GenerateContentConfig / TypedDict.
     gen_config = types.GenerateContentConfig(
-        temperature=0,
+        temperature=0.1,  # Slight flexibility for better reasoning
         max_output_tokens=32000,
         response_mime_type="application/json",
         response_schema=StudentAnswers,
-        thinking_config=types.ThinkingConfig(thinking_budget=-1),  # -1 = AUTOMATIC
+        thinking_config=types.ThinkingConfig(thinking_budget=2048),  # Increased reasoning budget
     )
 
     for attempt in range(1, MAX_RETRIES + 1):
