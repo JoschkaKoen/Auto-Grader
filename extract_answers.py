@@ -167,7 +167,7 @@ def color_wrong_answer(value: str, gt_value: str) -> str:
 DEFAULT_PDF = "output/20260330135527722.pdf"
 SAVE_DEBUG_IMAGES = True
 
-PDF_DPI = 400  # 150 DPI is sufficient for Gemini to read handwritten letters and names
+PDF_DPI = 300  # 150 DPI is sufficient for Gemini to read handwritten letters and names
 JPEG_QUALITY = 95
 CROP_TOP_FRACTION = 0.5
 
@@ -247,15 +247,20 @@ TOP SECTION (approximately top 15% of page):
   - Usually appears near the top-left or top-center
   - May be preceded by labels like "Name:", "Student:", or similar
 
-LEFT COLUMN (middle-left area, vertical arrangement):
-  Position 1 (upper): Question 38  → field: q38_left_top
-  Position 2:         Question 39  → field: q39_left
-  Position 3:         Question 40  → field: q40_left
-  Position 4 (lower): Question 38  → field: q38_left_bottom (second instance of Q38)
+LEFT COLUMN (middle-left area, approximately 20-45% from left edge, vertical arrangement):
+  Position 1 (upper ~20-35% from top):    Question 38  → field: q38_left_top
+  Position 2 (~35-50% from top):          Question 39  → field: q39_left
+  Position 3 (~50-65% from top):          Question 40  → field: q40_left
+  Position 4 (lower ~65-80% from top):    Question 38  → field: q38_left_bottom
+  
+  ⚠️ CRITICAL: There are TWO separate Question 38s on the LEFT side - one at the TOP
+     (q38_left_top) and one at the BOTTOM (q38_left_bottom). They have DIFFERENT answers!
 
-RIGHT COLUMN (middle-right area, vertical arrangement):
-  Position 1 (upper): Question 39  → field: q39_right
-  Position 2 (lower): Question 40  → field: q40_right
+RIGHT COLUMN (middle-right area, approximately 55-80% from left edge, vertical arrangement):
+  Position 1 (upper ~20-45% from top):    Question 39  → field: q39_right
+  Position 2 (lower ~45-70% from top):    Question 40  → field: q40_right
+  
+  ⚠️ CRITICAL: The RIGHT side has Q39 and Q40, but NO Q38! Do not confuse with left column.
 
 === ANSWER FORMAT GUIDE ===
 Students indicate answers in these ways:
@@ -274,6 +279,12 @@ For student names:
 - Look for capitalized words
 - Ignore titles like "Mr.", "Ms.", "Miss" if present
 - If multiple names present, choose the one that appears to be the student's full name
+
+For letter recognition (A, B, C, D):
+- A vs D confusion: Look for the horizontal bar in 'A' vs the full curve in 'D'
+- B vs P confusion: 'B' has two loops/bumps, 'P' has one
+- C vs O confusion: 'C' is open, 'O' is closed/complete circle
+- When in doubt between two letters, mark as "?" with low confidence
 
 === HANDLING AMBIGUOUS CASES ===
 1. Multiple answers marked:
@@ -356,6 +367,18 @@ Example 4 - Written answer:
 Example 5 - Name extraction:
   [Image shows "john smith" written at top]
   → student_name: "John Smith", student_name_confidence: "high"
+
+Example 6 - Multiple Q38s on left side:
+  [Image shows Q38 at top-left and another Q38 at bottom-left]
+  → q38_left_top: "A", q38_left_bottom: "C" (these are DIFFERENT answers!)
+
+Example 7 - Right side layout:
+  [Image shows Q39 and Q40 on the right side]
+  → q39_right: "B", q40_right: "D" (remember: right side has NO Q38!)
+
+Example 8 - Faint markings:
+  [Image shows very light pencil marks]
+  → Use your best judgment; if truly unreadable return "?" with low confidence
 """
 
 
@@ -367,6 +390,35 @@ def crop_top(image: Image.Image, fraction: float = CROP_TOP_FRACTION) -> Image.I
     """Return the top `fraction` of the image."""
     w, h = image.size
     return image.crop((0, 0, w, int(h * fraction)))
+
+
+def preprocess_for_extraction(image: Image.Image) -> Image.Image:
+    """Enhance image for better handwriting recognition.
+    
+    Applies contrast enhancement and sharpening to make handwritten
+    marks more visible for the Gemini model.
+    """
+    from PIL import ImageEnhance, ImageFilter
+    
+    # Convert to RGB if needed
+    if image.mode != 'RGB':
+        image = image.convert('RGB')
+    
+    # Enhance contrast to make markings stand out more
+    # This helps distinguish faint pencil marks from background
+    contrast_enhancer = ImageEnhance.Contrast(image)
+    image = contrast_enhancer.enhance(1.3)  # Moderate enhancement
+    
+    # Enhance sharpness for clearer letter boundaries
+    # Helps distinguish similar letters (A vs D, B vs P)
+    sharpness_enhancer = ImageEnhance.Sharpness(image)
+    image = sharpness_enhancer.enhance(1.4)
+    
+    # Slight brightness adjustment if image is dark
+    brightness_enhancer = ImageEnhance.Brightness(image)
+    image = brightness_enhancer.enhance(1.1)
+    
+    return image
 
 
 def to_jpeg_bytes(image: Image.Image, quality: int = JPEG_QUALITY) -> bytes:
@@ -678,9 +730,10 @@ def extract_first_n_students_eval(
             print(f"  Page {page_num:3d}/{len(pages)} -- extracting...", end="", flush=True)
 
         crop = crop_top(page, effective_crop_fraction())
-        img_bytes = to_jpeg_bytes(crop)
+        processed = preprocess_for_extraction(crop)
+        img_bytes = to_jpeg_bytes(processed)
         if debug_image_dir and SAVE_DEBUG_IMAGES:
-            crop.save(debug_image_dir / f"page_{page_num:04d}.jpg", quality=85)
+            processed.save(debug_image_dir / f"page_{page_num:04d}.jpg", quality=85)
 
         data = call_gemini(client, img_bytes, page_num)
         data["page_number"] = page_num
@@ -826,9 +879,9 @@ def main():
     parser.add_argument(
         "--first-students",
         type=int,
-        default=0,
+        default=6,
         metavar="N",
-        help="Only process the first N pages: extract, compare to ground truth, print summary, then exit.",
+        help="Only process the first N pages: extract, compare to ground truth, print summary, then exit. (default: 6)",
     )
     args = parser.parse_args()
 
@@ -924,10 +977,11 @@ def main():
         print(f"  Page {page_num:3d}/{len(pages)} -- extracting...", end="", flush=True)
 
         crop = crop_top(page, effective_crop_fraction())
-        img_bytes = to_jpeg_bytes(crop)
+        processed = preprocess_for_extraction(crop)
+        img_bytes = to_jpeg_bytes(processed)
 
         if SAVE_DEBUG_IMAGES:
-            crop.save(debug_image_dir / f"page_{page_num:04d}.jpg", quality=85)
+            processed.save(debug_image_dir / f"page_{page_num:04d}.jpg", quality=85)
 
         data = call_gemini(client, img_bytes, page_num)
         data["page_number"] = page_num
