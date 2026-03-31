@@ -17,3 +17,6 @@ output/
 *_answers.tex
 *_answers.pdf
 debug_crops*/
+
+# Ground-truth / evaluation labels (local only; do not publish)
+Ground Truth*
