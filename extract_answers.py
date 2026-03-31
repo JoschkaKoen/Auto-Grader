@@ -257,10 +257,15 @@ LEFT COLUMN (middle-left area, approximately 20-45% from left edge, vertical arr
      (q38_left_top) and one at the BOTTOM (q38_left_bottom). They have DIFFERENT answers!
 
 RIGHT COLUMN (middle-right area, approximately 55-80% from left edge, vertical arrangement):
-  Position 1 (upper ~20-45% from top):    Question 39  → field: q39_right
-  Position 2 (lower ~45-70% from top):    Question 40  → field: q40_right
+  Position 1 (upper ~20-40% from top):    Question 39  → field: q39_right
+  Position 2 (lower ~40-65% from top):    Question 40  → field: q40_right
   
   ⚠️ CRITICAL: The RIGHT side has Q39 and Q40, but NO Q38! Do not confuse with left column.
+  
+  For Q40 on RIGHT side (q40_right):
+  - Look for the question "What is the distance travelled by light in one year?"
+  - Options are: A, B, C, D with values like "5.9 × 10¹⁵ m", "9.5 × 10¹⁵ m"
+  - The CORRECT answer (C) often has a circle around the letter C
 
 === ANSWER FORMAT GUIDE ===
 Students indicate answers in these ways:
@@ -410,12 +415,12 @@ def preprocess_for_extraction(image: Image.Image) -> Image.Image:
     # Enhance contrast to make markings stand out more
     # This helps distinguish faint pencil marks from background
     contrast_enhancer = ImageEnhance.Contrast(image)
-    image = contrast_enhancer.enhance(1.3)  # Moderate enhancement
+    image = contrast_enhancer.enhance(1.5)  # Higher enhancement for faint marks
     
     # Enhance sharpness for clearer letter boundaries
     # Helps distinguish similar letters (A vs D, B vs P)
     sharpness_enhancer = ImageEnhance.Sharpness(image)
-    image = sharpness_enhancer.enhance(1.4)
+    image = sharpness_enhancer.enhance(1.6)
     
     # Slight brightness adjustment if image is dark
     brightness_enhancer = ImageEnhance.Brightness(image)
@@ -446,7 +451,7 @@ def call_gemini(client: genai.Client, image_bytes: bytes, page_num: int) -> dict
     # Typed config matches the API surface in types.GenerateContentConfig / TypedDict.
     gen_config = types.GenerateContentConfig(
         temperature=0,
-        max_output_tokens=16384,
+        max_output_tokens=32000,
         response_mime_type="application/json",
         response_schema=StudentAnswers,
         thinking_config=types.ThinkingConfig(thinking_budget=-1),  # -1 = AUTOMATIC
@@ -800,7 +805,7 @@ def extract_first_n_students_eval(
             processed.save(debug_image_dir / f"page_{page_num:04d}.jpg", quality=85)
 
         # Use multi-pass extraction for better accuracy during evaluation
-        data = call_gemini_multi_pass(client, img_bytes, page_num, passes=2)
+        data = call_gemini_multi_pass(client, img_bytes, page_num, passes=3)
         data["page_number"] = page_num
 
         name = data.get("student_name", "?")
