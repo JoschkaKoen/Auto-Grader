@@ -214,7 +214,7 @@ MAX_RETRIES = 3
 RETRY_BACKOFF_S = 1
 
 # Ensemble voting for improved accuracy
-ENSEMBLE_CALLS = 2  # Number of API calls per page for majority voting
+ENSEMBLE_CALLS = 3  # Number of API calls per page for majority voting
 USE_ENSEMBLE = True  # Set to False for single-call mode (faster but less accurate)
 
 
