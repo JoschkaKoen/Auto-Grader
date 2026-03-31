@@ -208,10 +208,14 @@ def normalize_extracted_record(data: dict) -> dict:
 
 # Gemini 3 Pro Preview is deprecated (shut down); use 3.1 Pro Preview per
 # https://ai.google.dev/gemini-api/docs/models
-GEMINI_MODEL = "gemini-2.5-pro-exp-03-25"
+GEMINI_MODEL = "gemini-1.5-pro"
 API_CALL_DELAY_S = 0
 MAX_RETRIES = 3
 RETRY_BACKOFF_S = 1
+
+# Ensemble voting for improved accuracy
+ENSEMBLE_CALLS = 2  # Number of API calls per page for majority voting
+USE_ENSEMBLE = True  # Set to False for single-call mode (faster but less accurate)
 
 
 # ---------------------------------------------------------------------------
@@ -472,7 +476,66 @@ def to_jpeg_bytes(image: Image.Image, quality: int = JPEG_QUALITY) -> bytes:
 
 
 def call_gemini(client: genai.Client, image_bytes: bytes, page_num: int) -> dict:
-    """Call Gemini Vision with structured output + retry + exponential backoff.
+    """Call Gemini Vision - uses ensemble voting if USE_ENSEMBLE is True."""
+    if USE_ENSEMBLE:
+        return call_gemini_ensemble(client, image_bytes, page_num, ENSEMBLE_CALLS)
+    else:
+        return call_gemini_single(client, image_bytes, page_num)
+
+
+def call_gemini_ensemble(client: genai.Client, image_bytes: bytes, page_num: int, 
+                         num_calls: int = 3) -> dict:
+    """Call Gemini multiple times and use majority voting for more robust results.
+    
+    For answer fields (q38_left_top, q39_left, etc.), takes majority vote.
+    For confidence and name fields, uses the most common value.
+    """
+    from collections import Counter
+    
+    results = []
+    for i in range(num_calls):
+        result = call_gemini_single(client, image_bytes, page_num)
+        results.append(result)
+    
+    # If only one result or all results are the same, return the first
+    if len(results) == 1:
+        return results[0]
+    
+    # Majority voting for answer fields
+    final_result = results[0].copy()
+    
+    for field in ANSWER_FIELDS:
+        votes = [r.get(field, "?") for r in results]
+        vote_counts = Counter(votes)
+        winner = vote_counts.most_common(1)[0][0]
+        final_result[field] = winner
+        
+        # Set confidence based on agreement level
+        agreement = vote_counts[winner] / len(votes)
+        if agreement == 1.0:
+            final_result[f"{field}_confidence"] = "high"
+        elif agreement >= 0.5:
+            final_result[f"{field}_confidence"] = "medium"
+        else:
+            final_result[f"{field}_confidence"] = "low"
+    
+    # For student name, use most common non-error name
+    names = [r.get("student_name", "UNKNOWN") for r in results 
+             if r.get("student_name") not in ("UNKNOWN", "EXTRACTION_ERROR", "?")]
+    if names:
+        name_counts = Counter(names)
+        final_result["student_name"] = name_counts.most_common(1)[0][0]
+    
+    # Overall confidence
+    confidences = [r.get("confidence", "low") for r in results]
+    conf_counts = Counter(confidences)
+    final_result["confidence"] = conf_counts.most_common(1)[0][0]
+    
+    return final_result
+
+
+def call_gemini_single(client: genai.Client, image_bytes: bytes, page_num: int) -> dict:
+    """Call Gemini Vision with structured output + retry + exponential backoff (single call).
 
     Config follows ``google.genai.types.GenerateContentConfig`` (see installed
     ``google-genai`` package). For models with *thinking* enabled, internal
