@@ -33,6 +33,13 @@ from pdf2image import convert_from_path
 from pydantic import BaseModel
 from PIL import Image
 
+# Try to import Kimi client
+try:
+    from openai import OpenAI
+    KIMI_AVAILABLE = True
+except ImportError:
+    KIMI_AVAILABLE = False
+
 # ---------------------------------------------------------------------------
 # Load .env
 # ---------------------------------------------------------------------------
@@ -209,6 +216,22 @@ def normalize_extracted_record(data: dict) -> dict:
 # Gemini 3 Pro Preview is deprecated (shut down); use 3.1 Pro Preview per
 # https://ai.google.dev/gemini-api/docs/models
 GEMINI_MODEL = "gemini-3.1-pro-preview"
+GEMINI_FLASH_MODEL = "gemini-2.0-flash"
+KIMI_MODEL = "kimi-k2.5"  # Best Kimi model
+
+# AI Model Selection - Set via AI_MODEL env var or change default below
+# Options: "gemini-pro", "gemini-flash", "kimi"
+DEFAULT_AI_MODEL = os.getenv("AI_MODEL", "kimi")  # Default set to Kimi
+
+# Log which model is being used
+print(f"[INFO] Using AI Model: {DEFAULT_AI_MODEL}")
+if DEFAULT_AI_MODEL.lower() == "kimi":
+    print(f"[INFO] Kimi model: {KIMI_MODEL}")
+elif DEFAULT_AI_MODEL.lower() in ("gemini-pro", "gemini"):
+    print(f"[INFO] Gemini model: {GEMINI_MODEL}")
+elif DEFAULT_AI_MODEL.lower() == "gemini-flash":
+    print(f"[INFO] Gemini model: {GEMINI_FLASH_MODEL}")
+
 API_CALL_DELAY_S = 0
 MAX_RETRIES = 3
 RETRY_BACKOFF_S = 1
@@ -469,12 +492,39 @@ def to_jpeg_bytes(image: Image.Image, quality: int = JPEG_QUALITY) -> bytes:
     return buf.getvalue()
 
 
-def call_gemini(client: genai.Client, image_bytes: bytes, page_num: int) -> dict:
-    """Call Gemini Vision - uses ensemble voting if USE_ENSEMBLE is True."""
-    if USE_ENSEMBLE:
-        return call_gemini_ensemble(client, image_bytes, page_num, ENSEMBLE_CALLS)
+def call_ocr_api(client: Any, image_bytes: bytes, page_num: int) -> dict:
+    """Call OCR API - dispatches to appropriate model based on AI_MODEL setting.
+    
+    Supports:
+    - gemini-pro / gemini-flash: Uses Google Gemini API
+    - kimi: Uses Moonshot Kimi API (OpenAI compatible)
+    """
+    model = DEFAULT_AI_MODEL.lower()
+    
+    if model == "kimi":
+        if isinstance(client, OpenAI):
+            return call_kimi_single(client, image_bytes, page_num)
+        else:
+            print("    Error: Kimi model selected but Gemini client provided")
+            return normalize_extracted_record({
+                "student_name": "EXTRACTION_ERROR",
+                "confidence": "failed",
+                "error": "Client type mismatch for Kimi"
+            })
     else:
-        return call_gemini_single(client, image_bytes, page_num)
+        # Gemini models
+        if isinstance(client, genai.Client):
+            if USE_ENSEMBLE:
+                return call_gemini_ensemble(client, image_bytes, page_num, ENSEMBLE_CALLS)
+            else:
+                return call_gemini_single(client, image_bytes, page_num)
+        else:
+            print("    Error: Gemini model selected but wrong client type")
+            return normalize_extracted_record({
+                "student_name": "EXTRACTION_ERROR",
+                "confidence": "failed", 
+                "error": "Client type mismatch for Gemini"
+            })
 
 
 def call_gemini_ensemble(client: genai.Client, image_bytes: bytes, page_num: int, 
@@ -608,6 +658,106 @@ def call_gemini_single(client: genai.Client, image_bytes: bytes, page_num: int) 
     )
 
 
+# ---------------------------------------------------------------------------
+# Kimi API Support
+# ---------------------------------------------------------------------------
+
+def get_kimi_client() -> OpenAI | None:
+    """Initialize Kimi/OpenAI compatible client.
+    
+    Kimi uses OpenAI-compatible API. Expects MOONSHOT_API_KEY in env.
+    """
+    if not KIMI_AVAILABLE:
+        print("Warning: OpenAI package not installed. Run: pip install openai")
+        return None
+    
+    api_key = os.getenv("MOONSHOT_API_KEY")
+    if not api_key:
+        print("Warning: MOONSHOT_API_KEY not set. Kimi will not be available.")
+        return None
+    
+    return OpenAI(
+        api_key=api_key,
+        base_url="https://api.moonshot.cn/v1"
+    )
+
+
+def call_kimi_single(client: OpenAI, image_bytes: bytes, page_num: int) -> dict:
+    """Call Kimi Vision API for extraction.
+    
+    Kimi uses OpenAI-compatible API with vision support.
+    """
+    import base64
+    
+    last_error = None
+    backoff = RETRY_BACKOFF_S
+    
+    # Convert image to base64
+    image_b64 = base64.b64encode(image_bytes).decode('utf-8')
+    
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            response = client.chat.completions.create(
+                model=KIMI_MODEL,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": PROMPT},
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{image_b64}"
+                                }
+                            }
+                        ]
+                    }
+                ],
+                temperature=0.1,
+                max_tokens=4096,
+                response_format={"type": "json_object"}
+            )
+            
+            raw = response.choices[0].message.content or ""
+            try:
+                data = json.loads(raw)
+                return normalize_extracted_record(data)
+            except json.JSONDecodeError as parse_err:
+                print(f"    [DEBUG] Kimi response parse error: {parse_err}")
+                print(f"    [DEBUG] Raw response: {raw[:500]}...")
+                raise RuntimeError(f"Unparseable Kimi response for page {page_num}") from parse_err
+                
+        except Exception as e:
+            print(f"    Kimi API error (attempt {attempt}/{MAX_RETRIES}): {e}")
+            last_error = e
+            
+        if attempt < MAX_RETRIES:
+            print(f"    Retrying in {backoff}s...")
+            time.sleep(backoff)
+            backoff *= 2
+    
+    return normalize_extracted_record(
+        {
+            "student_name": "EXTRACTION_ERROR",
+            "student_name_confidence": "failed",
+            "q38_left_top": "?",
+            "q38_left_top_confidence": "failed",
+            "q39_left": "?",
+            "q39_left_confidence": "failed",
+            "q40_left": "?",
+            "q40_left_confidence": "failed",
+            "q38_left_bottom": "?",
+            "q38_left_bottom_confidence": "failed",
+            "q39_right": "?",
+            "q39_right_confidence": "failed",
+            "q40_right": "?",
+            "q40_right_confidence": "failed",
+            "confidence": "failed",
+            "error": str(last_error),
+        }
+    )
+
+
 def call_gemini_multi_pass(client: genai.Client, image_bytes: bytes, page_num: int, passes: int = 2) -> dict:
     """Call Gemini multiple times and return result with highest confidence.
     
@@ -615,11 +765,11 @@ def call_gemini_multi_pass(client: genai.Client, image_bytes: bytes, page_num: i
     using consistency voting and confidence scoring across multiple runs.
     """
     if passes <= 1:
-        return call_gemini(client, image_bytes, page_num)
+        return call_ocr_api(client, image_bytes, page_num)
     
     results = []
     for i in range(passes):
-        result = call_gemini(client, image_bytes, page_num)
+        result = call_ocr_api(client, image_bytes, page_num)
         results.append(result)
         if i < passes - 1:
             time.sleep(0.5)  # Small delay between passes
@@ -855,10 +1005,16 @@ def extract_first_n_students_eval(
     gt_names = list(gt.keys())
 
     if client is None:
-        key = api_key or os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
-        if not key:
-            raise RuntimeError("Set GOOGLE_API_KEY or GEMINI_API_KEY, or pass api_key= / client=.")
-        client = genai.Client(api_key=key)
+        model = DEFAULT_AI_MODEL.lower()
+        if model == "kimi":
+            client = get_kimi_client()
+            if client is None:
+                raise RuntimeError("Kimi model selected but failed to initialize. Check MOONSHOT_API_KEY.")
+        else:
+            key = api_key or os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+            if not key:
+                raise RuntimeError("Set GOOGLE_API_KEY or GEMINI_API_KEY, or pass api_key= / client=.")
+            client = genai.Client(api_key=key)
 
     if verbose and gt:
         print(f"Ground truth loaded: {len(gt)} students ({', '.join(gt_names)})")
@@ -1053,13 +1209,21 @@ def main():
         if not pdf_path.exists():
             print(f"ERROR: PDF not found: {pdf_path}")
             raise SystemExit(1)
-        api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
-        if not api_key:
-            print("ERROR: Set GOOGLE_API_KEY (or GEMINI_API_KEY) in .env or environment.")
-            raise SystemExit(1)
-        if os.getenv("GOOGLE_API_KEY") and os.getenv("GEMINI_API_KEY"):
-            print("Both GOOGLE_API_KEY and GEMINI_API_KEY are set. Using GOOGLE_API_KEY.")
-        client = genai.Client(api_key=api_key)
+        # Initialize client based on AI_MODEL setting
+        model = DEFAULT_AI_MODEL.lower()
+        if model == "kimi":
+            client = get_kimi_client()
+            if client is None:
+                print("ERROR: Kimi model selected but failed to initialize. Check MOONSHOT_API_KEY.")
+                raise SystemExit(1)
+        else:
+            api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+            if not api_key:
+                print("ERROR: Set GOOGLE_API_KEY (or GEMINI_API_KEY) in .env or environment.")
+                raise SystemExit(1)
+            if os.getenv("GOOGLE_API_KEY") and os.getenv("GEMINI_API_KEY"):
+                print("Both GOOGLE_API_KEY and GEMINI_API_KEY are set. Using GOOGLE_API_KEY.")
+            client = genai.Client(api_key=api_key)
         stem = pdf_path.stem
         eval_json = Path(f"{stem}_first{args.first_students}_eval.json")
         result = extract_first_n_students_eval(
@@ -1088,12 +1252,19 @@ def main():
     output_report = Path(f"{stem}_answers.pdf")
     debug_image_dir = Path(f"debug_crops_{stem}")
 
-    api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
-    if not api_key:
-        print("ERROR: Set GOOGLE_API_KEY (or GEMINI_API_KEY) in .env or environment.")
-        raise SystemExit(1)
-
-    client = genai.Client(api_key=api_key)
+    # Initialize client based on AI_MODEL setting
+    model = DEFAULT_AI_MODEL.lower()
+    if model == "kimi":
+        client = get_kimi_client()
+        if client is None:
+            print("ERROR: Kimi model selected but failed to initialize. Check MOONSHOT_API_KEY.")
+            raise SystemExit(1)
+    else:
+        api_key = os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            print("ERROR: Set GOOGLE_API_KEY (or GEMINI_API_KEY) in .env or environment.")
+            raise SystemExit(1)
+        client = genai.Client(api_key=api_key)
 
     if SAVE_DEBUG_IMAGES:
         debug_image_dir.mkdir(parents=True, exist_ok=True)
@@ -1145,7 +1316,7 @@ def main():
         if SAVE_DEBUG_IMAGES:
             processed.save(debug_image_dir / f"page_{page_num:04d}.jpg", quality=85)
 
-        data = call_gemini(client, img_bytes, page_num)
+        data = call_ocr_api(client, img_bytes, page_num)
         data["page_number"] = page_num
         results_map[page_num] = data
 
