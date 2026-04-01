@@ -19,6 +19,8 @@ The program will:
   6. Identify which pages belong to which student.
   7. Detect which exercises each student attempted.
   8. Grade and print a full results table.
+  9. Evaluate against ground truth (if a ground_truth.txt file exists in the folder).
+ 10. Generate a LaTeX/PDF report in the output directory.
 """
 
 from __future__ import annotations
@@ -65,6 +67,18 @@ def parse_args() -> argparse.Namespace:
         default=False,
         help="Skip PDF cleaning step (use existing cleaned_scan.pdf if present)",
     )
+    parser.add_argument(
+        "--output-dir",
+        default="output",
+        metavar="DIR",
+        help="Directory for the PDF report and LaTeX source (default: output/)",
+    )
+    parser.add_argument(
+        "--no-report",
+        action="store_true",
+        default=False,
+        help="Skip PDF report generation (terminal output only)",
+    )
     return parser.parse_args()
 
 
@@ -78,7 +92,9 @@ def main() -> None:
     from pipeline.answer_detection import detect_answered_exercises
     from pipeline.folder_discovery import find_folder
     from pipeline.grading import grade_students
+    from pipeline.ground_truth import evaluate_results, find_ground_truth_file, load_ground_truth
     from pipeline.output import (
+        print_evaluation_summary,
         print_exercise_summary,
         print_grand_summary,
         print_page_summary,
@@ -88,6 +104,7 @@ def main() -> None:
     from pipeline.page_assignment import assign_pages
     from pipeline.pdf_cleanup import cleanup_pdf
     from pipeline.prompt_parser import parse_prompt
+    from pipeline.report import generate_report
     from pipeline.scaffold import build_scaffold
     from pipeline.student_list import read_student_list
 
@@ -191,6 +208,41 @@ def main() -> None:
     )
     print_results_table(results, scaffold)
     print_grand_summary(results)
+
+    # ------------------------------------------------------------------ #
+    # Step 10: Ground truth evaluation (if file exists in exam folder)   #
+    # ------------------------------------------------------------------ #
+    eval_data: dict | None = None
+    gt_file = find_ground_truth_file(folder)
+    if gt_file is not None:
+        print(f"[grade] Ground truth file found: {gt_file.name}")
+        gt = load_ground_truth(folder, scaffold)
+        if gt:
+            eval_data = evaluate_results(results, gt, scaffold)
+            print_evaluation_summary(eval_data, scaffold)
+        else:
+            print("[grade] Ground truth file could not be parsed — skipping evaluation.")
+    else:
+        print("[grade] No ground truth file found — skipping evaluation.")
+        print("        (To enable, add a ground_truth.txt file to the exam folder.)")
+
+    # ------------------------------------------------------------------ #
+    # Step 11: PDF report                                                 #
+    # ------------------------------------------------------------------ #
+    if not args.no_report:
+        output_dir = Path(args.output_dir)
+        stem = folder.name.replace(" ", "_")
+        output_tex = output_dir / f"{stem}_grade_report.tex"
+        output_pdf = output_dir / f"{stem}_grade_report.pdf"
+        title = f"{folder.name} — Grading Report"
+        generate_report(
+            scaffold=scaffold,
+            results=results,
+            output_tex=output_tex,
+            output_pdf=output_pdf,
+            eval_data=eval_data,
+            title=title,
+        )
 
 
 if __name__ == "__main__":

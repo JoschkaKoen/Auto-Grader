@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import statistics
-from typing import Sequence
 
 from extraction.reporting import Colors
 
@@ -124,6 +123,51 @@ def print_results_table(results: list[StudentResult], scaffold: ExamScaffold) ->
 # ---------------------------------------------------------------------------
 # Grand summary
 # ---------------------------------------------------------------------------
+
+def print_evaluation_summary(eval_data: dict, scaffold: ExamScaffold) -> None:
+    """Print per-student and overall accuracy against ground truth."""
+    overall_pct = eval_data["overall_accuracy_pct"]
+    overall_str = (
+        f"{eval_data['overall_correct']}/{eval_data['overall_total']}"
+        f"  ({overall_pct:.1f}%)"
+    )
+    color = _pct_color(overall_pct)
+
+    print(f"\n{'═' * 60}")
+    print(f"  GROUND TRUTH EVALUATION")
+    print(f"{'═' * 60}")
+    print(f"  Overall accuracy: {color}{overall_str}{Colors.RESET}")
+    print()
+
+    q_nums = [q.number for q in scaffold.questions]
+    max_name = max((len(r["name"]) for r in eval_data["per_student"]), default=10)
+
+    # Header
+    q_hdr = "  ".join(f"Q{n}" for n in q_nums)
+    print(f"  {'Student':<{max_name}}  {q_hdr:<{len(q_hdr)}}  {'Acc':>6}")
+    print(f"  {_bar(max_name + len(q_hdr) + 12)}")
+
+    for row in eval_data["per_student"]:
+        pq = row["per_question"]
+        cells = []
+        for q_num in q_nums:
+            info = pq.get(q_num)
+            if info is None:
+                cells.append(" –")
+            elif info["ok"]:
+                cells.append(f"{Colors.GREEN}{info['extracted']:>2}{Colors.RESET}")
+            else:
+                cells.append(f"{Colors.RED}{info['extracted']:>2}{Colors.RESET}")
+        cell_str = "  ".join(cells)
+        acc_pct = row["accuracy_pct"]
+        acc_color = _pct_color(acc_pct)
+        print(
+            f"  {row['name']:<{max_name}}  {cell_str}  "
+            f"{acc_color}{row['correct']}/{row['total']} ({acc_pct:.0f}%){Colors.RESET}"
+        )
+
+    print(f"{'═' * 60}\n")
+
 
 def print_grand_summary(results: list[StudentResult]) -> None:
     if not results:
