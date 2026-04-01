@@ -1020,7 +1020,7 @@ def extract_first_n_students_eval(
         print(f"PDF→images ({PDF_DPI} DPI): {elapsed:.2f}s — {len(pages)} page(s).\n")
 
     if debug_image_dir is None and SAVE_DEBUG_IMAGES:
-        debug_image_dir = Path(f"debug_crops_{pdf_path.stem}_first{n}")
+        debug_image_dir = Path(f"debug/debug_crops_{pdf_path.stem}_first{n}")
     if debug_image_dir and SAVE_DEBUG_IMAGES:
         debug_image_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1235,7 +1235,7 @@ def main():
     output_json   = Path(f"{stem}_answers.json")
     output_tex    = Path(f"{stem}_answers.tex")
     output_report = Path(f"{stem}_answers.pdf")
-    debug_image_dir = Path(f"debug_crops_{stem}")
+    debug_image_dir = Path(f"debug/debug_crops_{stem}")
 
     # Initialize client based on AI_MODEL setting
     if AI_MODEL.startswith("kimi"):

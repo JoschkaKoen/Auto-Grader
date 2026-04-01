@@ -16,7 +16,7 @@ output/
 *_answers.json
 *_answers.tex
 *_answers.pdf
-debug_crops*/
+debug/
 
 # Ground-truth / evaluation labels (local only; do not publish)
 Ground Truth*
