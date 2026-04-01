@@ -115,6 +115,7 @@ For letter recognition (A, B, C, D):
 1. For each question field, return ONLY: A, B, C, D, or ?
    - NEVER return descriptive text like "circle around B" - just "B"
    - NEVER return empty string "" - use "?" if unreadable
+   - ONLY return the fields listed above - do NOT add extra fields like "notes" or "overall_confidence"
 
 2. For student_name field:
    - Return the name EXACTLY as written (preserve spelling)

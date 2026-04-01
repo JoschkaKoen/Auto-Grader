@@ -28,6 +28,16 @@ def _kimi_k2_5_model() -> bool:
     return AI_MODEL.startswith("kimi-k2")
 
 
+def _filter_schema_fields(data: dict, schema: type[BaseModel]) -> dict:
+    """Remove extra fields not defined in the schema.
+    
+    Kimi sometimes adds extra fields like 'notes' or 'overall_confidence'
+    that aren't in our schema. This filters them out.
+    """
+    allowed_fields = set(schema.model_fields.keys())
+    return {k: v for k, v in data.items() if k in allowed_fields}
+
+
 def _extract_json_from_text(text: str) -> dict | None:
     """Extract JSON from text, handling truncation and extra content.
     
@@ -168,6 +178,8 @@ class KimiProvider:
                 raw = response.choices[0].message.content or ""
                 try:
                     data = json.loads(raw)
+                    # Filter out extra fields Kimi might add (notes, overall_confidence, etc.)
+                    data = _filter_schema_fields(data, schema)
                     try:
                         schema.model_validate(data)
                     except ValidationError:
@@ -178,6 +190,8 @@ class KimiProvider:
                     partial_data = _extract_json_from_text(raw)
                     if partial_data is not None:
                         print(f"    [INFO] Recovered partial JSON response for page {page_num}")
+                        # Also filter extra fields from partial data
+                        partial_data = _filter_schema_fields(partial_data, schema)
                         try:
                             schema.model_validate(partial_data)
                         except ValidationError:
