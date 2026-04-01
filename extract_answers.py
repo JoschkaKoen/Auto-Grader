@@ -46,22 +46,38 @@ except ImportError:
 load_dotenv()
 
 # ---------------------------------------------------------------------------
+# Import Configuration
+# ---------------------------------------------------------------------------
+from config import (
+    AI_MODEL,
+    API_CALL_DELAY_S,
+    MAX_RETRIES,
+    RETRY_BACKOFF_S,
+    PDF_DPI,
+    JPEG_QUALITY,
+    CROP_TOP_FRACTION,
+    PREPROCESS_CONTRAST,
+    PREPROCESS_SHARPNESS,
+    PREPROCESS_BRIGHTNESS,
+    USE_ENSEMBLE,
+    ENSEMBLE_CALLS,
+    MULTI_PASS_COUNT,
+    GEMINI_TEMPERATURE,
+    GEMINI_MAX_OUTPUT_TOKENS,
+    GEMINI_THINKING_BUDGET,
+    KIMI_TEMPERATURE,
+    KIMI_MAX_TOKENS,
+    DEFAULT_PDF,
+    GROUND_TRUTH_PATH,
+    SAVE_DEBUG_IMAGES,
+    ANSWER_FIELDS,
+)
+
+# ---------------------------------------------------------------------------
 # Ground Truth Handling
 # ---------------------------------------------------------------------------
 
-# Default path to ground truth file (with trailing space as created)
-GROUND_TRUTH_PATH = Path("/Users/joschka/Desktop/Programming/Auto-Grader/Ground Truth ")
-
-# Answer field names in order (matching ground truth columns)
-ANSWER_FIELDS = [
-    "q38_left_top",
-    "q39_left",
-    "q40_left",
-    "q38_left_bottom",
-    "q39_right",
-    "q40_right",
-]
-
+# Note: GROUND_TRUTH_PATH and ANSWER_FIELDS are imported from config.py
 
 def load_ground_truth(gt_path: Path = GROUND_TRUTH_PATH) -> dict[str, list[str]]:
     """Load ground truth answers from file.
@@ -168,16 +184,8 @@ def color_wrong_answer(value: str, gt_value: str) -> str:
     return f"{Colors.RED}{value}{Colors.RESET}"
 
 # ---------------------------------------------------------------------------
-# Configuration defaults
+# Utility Functions (configuration imported from config.py)
 # ---------------------------------------------------------------------------
-
-DEFAULT_PDF = "output/20260330135527722.pdf"
-SAVE_DEBUG_IMAGES = True
-
-PDF_DPI = 400  # Higher DPI for better handwriting recognition
-JPEG_QUALITY = 95
-CROP_TOP_FRACTION = 0.6
-
 
 def effective_crop_fraction() -> float:
     """Optional override via ``EXTRACT_CROP_FRACTION`` (e.g. 0.55) for eval tuning."""
@@ -213,32 +221,9 @@ def normalize_extracted_record(data: dict) -> dict:
             data[field] = normalize_mc_answer(data.get(field))
     return data
 
-# Gemini 3 Pro Preview is deprecated (shut down); use 3.1 Pro Preview per
-# https://ai.google.dev/gemini-api/docs/models
-GEMINI_MODEL = "gemini-3.1-pro-preview"
-GEMINI_FLASH_MODEL = "gemini-2.0-flash"
-KIMI_MODEL = "kimi-k2.5"  # Best Kimi model
 
-# AI Model Selection - Set via AI_MODEL env var or change default below
-# Options: "gemini-pro", "gemini-flash", "kimi"
-DEFAULT_AI_MODEL = os.getenv("AI_MODEL", "kimi")  # Default set to Kimi
-
-# Log which model is being used
-print(f"[INFO] Using AI Model: {DEFAULT_AI_MODEL}")
-if DEFAULT_AI_MODEL.lower() == "kimi":
-    print(f"[INFO] Kimi model: {KIMI_MODEL}")
-elif DEFAULT_AI_MODEL.lower() in ("gemini-pro", "gemini"):
-    print(f"[INFO] Gemini model: {GEMINI_MODEL}")
-elif DEFAULT_AI_MODEL.lower() == "gemini-flash":
-    print(f"[INFO] Gemini model: {GEMINI_FLASH_MODEL}")
-
-API_CALL_DELAY_S = 0
-MAX_RETRIES = 3
-RETRY_BACKOFF_S = 1
-
-# Ensemble voting for improved accuracy
-ENSEMBLE_CALLS = 3  # Number of API calls per page for majority voting
-USE_ENSEMBLE = False  # Set to True for ensemble voting (slower but potentially more accurate)
+# Log which AI model is being used
+print(f"[INFO] Using AI Model: {AI_MODEL}")
 
 
 # ---------------------------------------------------------------------------
@@ -495,24 +480,24 @@ def to_jpeg_bytes(image: Image.Image, quality: int = JPEG_QUALITY) -> bytes:
 def call_ocr_api(client: Any, image_bytes: bytes, page_num: int) -> dict:
     """Call OCR API - dispatches to appropriate model based on AI_MODEL setting.
     
-    Supports:
-    - gemini-pro / gemini-flash: Uses Google Gemini API
-    - kimi: Uses Moonshot Kimi API (OpenAI compatible)
+    Supports exact model names from config:
+    - "gemini-3.1-pro-preview" : Google Gemini 3.1 Pro
+    - "gemini-2.0-flash"       : Google Gemini 2.0 Flash
+    - "kimi-k2.5"              : Moonshot Kimi K2.5
     """
-    model = DEFAULT_AI_MODEL.lower()
-    
-    if model == "kimi":
+    # Check if using Kimi (any kimi-* model)
+    if AI_MODEL.startswith("kimi"):
         if isinstance(client, OpenAI):
             return call_kimi_single(client, image_bytes, page_num)
         else:
-            print("    Error: Kimi model selected but Gemini client provided")
+            print("    Error: Kimi model selected but wrong client type")
             return normalize_extracted_record({
                 "student_name": "EXTRACTION_ERROR",
                 "confidence": "failed",
                 "error": "Client type mismatch for Kimi"
             })
     else:
-        # Gemini models
+        # Gemini models (any gemini-* model)
         if isinstance(client, genai.Client):
             if USE_ENSEMBLE:
                 return call_gemini_ensemble(client, image_bytes, page_num, ENSEMBLE_CALLS)
@@ -1005,12 +990,13 @@ def extract_first_n_students_eval(
     gt_names = list(gt.keys())
 
     if client is None:
-        model = DEFAULT_AI_MODEL.lower()
-        if model == "kimi":
+        # Check if using Kimi (any kimi-* model)
+        if AI_MODEL.startswith("kimi"):
             client = get_kimi_client()
             if client is None:
                 raise RuntimeError("Kimi model selected but failed to initialize. Check MOONSHOT_API_KEY.")
         else:
+            # Gemini models
             key = api_key or os.getenv("GOOGLE_API_KEY") or os.getenv("GEMINI_API_KEY")
             if not key:
                 raise RuntimeError("Set GOOGLE_API_KEY or GEMINI_API_KEY, or pass api_key= / client=.")
@@ -1210,8 +1196,7 @@ def main():
             print(f"ERROR: PDF not found: {pdf_path}")
             raise SystemExit(1)
         # Initialize client based on AI_MODEL setting
-        model = DEFAULT_AI_MODEL.lower()
-        if model == "kimi":
+        if AI_MODEL.startswith("kimi"):
             client = get_kimi_client()
             if client is None:
                 print("ERROR: Kimi model selected but failed to initialize. Check MOONSHOT_API_KEY.")
@@ -1253,8 +1238,7 @@ def main():
     debug_image_dir = Path(f"debug_crops_{stem}")
 
     # Initialize client based on AI_MODEL setting
-    model = DEFAULT_AI_MODEL.lower()
-    if model == "kimi":
+    if AI_MODEL.startswith("kimi"):
         client = get_kimi_client()
         if client is None:
             print("ERROR: Kimi model selected but failed to initialize. Check MOONSHOT_API_KEY.")
