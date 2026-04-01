@@ -10,7 +10,7 @@ from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
-from config import AI_MODEL, KIMI_MAX_TOKENS, KIMI_TEMPERATURE, KIMI_THINKING, MAX_RETRIES, RETRY_BACKOFF_S
+from config import AI_MODEL, KIMI_MAX_TOKENS, KIMI_THINKING, MAX_RETRIES, RETRY_BACKOFF_S
 from extraction.images import normalize_extracted_record
 
 
@@ -122,8 +122,6 @@ class KimiProvider:
                     response_format={"type": "json_object"},
                     **extra,
                 )
-                if not is_k2_5:
-                    kwargs["temperature"] = KIMI_TEMPERATURE
                 response = client.chat.completions.create(**kwargs)
 
                 raw = response.choices[0].message.content or ""

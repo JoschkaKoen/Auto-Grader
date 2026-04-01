@@ -96,17 +96,14 @@ GEMINI_TEMPERATURE = 0.1
 # Maximum output tokens for Gemini response.
 GEMINI_MAX_OUTPUT_TOKENS = 32000
 
-# Thinking budget for Gemini reasoning.
-# Higher values allow more internal reasoning steps.
-GEMINI_THINKING_BUDGET = 2048
+# Enable extended thinking for Gemini 2.5+ models.
+# True  → model reasons step-by-step before answering (slower, uses more tokens).
+# False → thinking disabled (thinking_budget=0); faster and cheaper.
+GEMINI_THINKING = False
 
 # =============================================================================
 # Kimi Model Parameters
 # =============================================================================
-
-# Temperature for Kimi model
-# Note: kimi-k2.x models ignore this value (fixed by the API at 1.0 / 0.6).
-KIMI_TEMPERATURE = 0.1
 
 # Maximum tokens for Kimi response
 KIMI_MAX_TOKENS = 4096

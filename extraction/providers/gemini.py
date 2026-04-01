@@ -16,7 +16,7 @@ from config import (
     ENSEMBLE_CALLS,
     GEMINI_MAX_OUTPUT_TOKENS,
     GEMINI_TEMPERATURE,
-    GEMINI_THINKING_BUDGET,
+    GEMINI_THINKING,
     MAX_RETRIES,
     RETRY_BACKOFF_S,
     USE_ENSEMBLE,
@@ -72,7 +72,9 @@ class GeminiProvider:
             max_output_tokens=GEMINI_MAX_OUTPUT_TOKENS,
             response_mime_type="application/json",
             response_schema=schema,
-            thinking_config=types.ThinkingConfig(thinking_budget=GEMINI_THINKING_BUDGET),
+            thinking_config=types.ThinkingConfig(
+                thinking_budget=1024 if GEMINI_THINKING else 0
+            ),
         )
 
         for attempt in range(1, MAX_RETRIES + 1):
