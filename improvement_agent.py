@@ -18,6 +18,8 @@ import time
 from datetime import datetime
 from pathlib import Path
 
+from config import DEFAULT_PDF
+
 # Configuration
 IMPROVEMENT_LOG = Path("improvement_log.jsonl")
 CONFIG_PATH = Path("config.py")
@@ -48,7 +50,7 @@ def log_event(event_type: str, data: dict):
 
 def run_eval(start_student: int = 1, end_student: int = 6) -> dict:
     """Run evaluation on specified student range and return results."""
-    pdf_path = Path("output/20260330135527722.pdf")
+    pdf_path = Path(DEFAULT_PDF)
     
     # Use the --first-students flag for end_student
     # We'll filter for start_student later

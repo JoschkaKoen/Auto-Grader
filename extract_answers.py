@@ -6,7 +6,7 @@ CLI entry point: extracts student names + handwritten MC answers from scanned
 exam PDFs using the configured vision model. See ``extraction/`` for modules.
 
     python extract_answers.py
-    python extract_answers.py output/some_other.pdf
+    python extract_answers.py "Space Physics Unit Test/scan 300dpi.pdf"
 """
 
 from __future__ import annotations

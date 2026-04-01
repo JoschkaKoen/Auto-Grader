@@ -116,14 +116,14 @@ KIMI_MAX_TOKENS = 8192
 # Enable extended thinking for kimi-k2.x models.
 # True  → model reasons step-by-step before answering (slower, uses more tokens).
 # False → thinking disabled; faster and cheaper, usually sufficient for OCR.
-KIMI_THINKING = False
+KIMI_THINKING = True
 
 # =============================================================================
 # Paths and File Handling
 # =============================================================================
 
-# Default PDF to process
-DEFAULT_PDF = "output/20260330135527722.pdf"
+# Default PDF to process (raw scans; see ``Space Physics Unit Test/``)
+DEFAULT_PDF = "Space Physics Unit Test/scan 400dpi.pdf"
 
 # Ground truth file path (for accuracy evaluation; repo-relative)
 GROUND_TRUTH_PATH = Path(__file__).resolve().parent / "Ground Truth "

@@ -9,6 +9,7 @@ import os
 import time
 from pathlib import Path
 
+from config import DEFAULT_PDF
 from pdf2image import convert_from_path
 
 
@@ -17,7 +18,7 @@ def main() -> None:
     parser.add_argument(
         "pdf",
         nargs="?",
-        default="output/20260330135527722.pdf",
+        default=DEFAULT_PDF,
         help="Input PDF path",
     )
     parser.add_argument("--dpi", type=int, default=300, help="Render DPI (default: 300)")

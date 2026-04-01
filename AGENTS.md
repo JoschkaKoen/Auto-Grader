@@ -52,7 +52,7 @@ Auto-Grader/
 ├── .gitignore                 # Excludes .env, outputs, debug files
 ├── Ground Truth               # Tab-separated reference answers (local only)
 ├── output/                    # Processed PDFs + `{stem}_answers.{json,tex,pdf}`
-├── Space Physics Unit Test Scans/   # Source scanned PDFs (gitignored)
+├── Space Physics Unit Test/         # Source scanned PDFs (gitignored)
 ├── debug/                     # Debug crops (e.g. debug/debug_crops_*)
 └── *_first*_eval.json         # Eval outputs (auto-generated)
 ```
@@ -98,11 +98,11 @@ python autograder.py scan.pdf cleaned.pdf \
 ### Answer Extraction (extract_answers.py)
 
 ```bash
-# Process default PDF (output/20260330135527722.pdf)
+# Process default PDF (``config.DEFAULT_PDF``, e.g. Space Physics scan)
 python extract_answers.py
 
 # Process specific PDF
-python extract_answers.py output/some_other.pdf
+python extract_answers.py "Space Physics Unit Test/scan 300dpi.pdf"
 
 # Process first N students only (for evaluation)
 python extract_answers.py --first-students 12
@@ -166,9 +166,9 @@ Processing pipeline:
 ### Output Naming
 
 Full-run outputs use the input PDF stem under `output/`:
-- Input: `output/20260330135527722.pdf`
-- JSON / TeX / PDF: `output/20260330135527722_answers.{json,tex,pdf}`
-- Debug crops: `debug/debug_crops_20260330135527722/`
+- Input example: `Space Physics Unit Test/scan 400dpi.pdf` (or a cleaned PDF under `output/`)
+- JSON / TeX / PDF: `output/{stem}_answers.{json,tex,pdf}` (e.g. `scan 400dpi_answers.json`)
+- Debug crops: `debug/debug_crops_{stem}/`
 - Eval (`--first-students N`): `{stem}_firstN_eval.json` in the project root
 
 This ensures processing different PDFs doesn't overwrite previous results.
@@ -234,7 +234,7 @@ Accuracy is calculated against ground truth using fuzzy name matching (SequenceM
 ### Data Privacy
 
 - Scanned exam PDFs contain student names and work — do not commit to public repositories
-- The `Space Physics Unit Test Scans/` directory is gitignored
+- The `Space Physics Unit Test/` directory is gitignored
 - Ground truth files are gitignored (`Ground Truth*`)
 - Debug crop images may contain student information
 
@@ -255,7 +255,8 @@ git commit -m "Your message"
 
 **Never commit**:
 - `.env` or `.env.*`
-- `Space Physics Unit Test Scans/`
+- Any `*.pdf` (gitignored repo-wide; scans and generated reports)
+- `Space Physics Unit Test/`
 - `output/` directory
 - `debug_crops*/` directories
 - `*_answers.{json,tex,pdf}`

@@ -8,8 +8,11 @@ __pycache__/
 *.py[cod]
 .DS_Store
 
-# PDF scans and processed output (not tracked)
-Space Physics Unit Test Scans/
+# PDFs (exam scans, reports) — never commit; may contain student data
+*.pdf
+
+# Source scan folder and processed output trees
+Space Physics Unit Test/
 output/
 
 # Debug crops folder
@@ -20,3 +23,6 @@ Ground Truth*
 
 # Evaluation results folder
 eval/
+
+# Local agent / benchmark logs
+improvement_log.jsonl
