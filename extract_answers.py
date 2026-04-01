@@ -1232,9 +1232,11 @@ def main():
     # Derive per-PDF output paths from the input filename stem so that running
     # on different PDFs does not mix up or overwrite each other's results.
     stem = pdf_path.stem
-    output_json   = Path(f"{stem}_answers.json")
-    output_tex    = Path(f"{stem}_answers.tex")
-    output_report = Path(f"{stem}_answers.pdf")
+    output_dir = Path("output")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    output_json   = output_dir / f"{stem}_answers.json"
+    output_tex    = output_dir / f"{stem}_answers.tex"
+    output_report = output_dir / f"{stem}_answers.pdf"
     debug_image_dir = Path(f"debug/debug_crops_{stem}")
 
     # Initialize client based on AI_MODEL setting

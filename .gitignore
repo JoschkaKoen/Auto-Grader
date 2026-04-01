@@ -12,10 +12,7 @@ __pycache__/
 Space Physics Unit Test Scans/
 output/
 
-# extract_answers outputs + debug crops
-*_answers.json
-*_answers.tex
-*_answers.pdf
+# Debug crops folder
 debug/
 
 # Ground-truth / evaluation labels (local only; do not publish)
