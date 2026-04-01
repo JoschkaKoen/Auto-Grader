@@ -1,0 +1,288 @@
+# Auto-Grader — Agent Guide
+
+## Project Overview
+
+Auto-Grader is a Python-based CLI toolchain for processing scanned IGCSE Physics exam papers. It provides two main capabilities:
+
+1. **PDF Preprocessing** (`autograder.py`): Cleans scanned exam PDFs by auto-rotating pages to upright orientation using Tesseract OSD, removing blank/white pages, and writing a new PDF with pages copied losslessly using `pikepdf`.
+
+2. **Answer Extraction** (`extract_answers.py` + `extraction/` package): Uses Gemini or Kimi vision APIs (see `config.AI_MODEL`) to extract student names and handwritten multiple-choice answers (Questions 38-40), with structured output via Pydantic exam profiles.
+
+The project is designed for educators who need to process batches of scanned exam papers and extract student responses for grading or analysis.
+
+## Technology Stack
+
+- **Language**: Python 3.10 or newer
+- **Core Dependencies**:
+  - `pdf2image` (≥1.17.0) — PDF to image conversion
+  - `pytesseract` (≥0.3.13) — OCR for orientation detection
+  - `pikepdf` (≥10.0.0) — Lossless PDF manipulation
+  - `google-genai` (≥1.0.0) — Gemini Vision API client
+  - `openai` (optional) — Kimi / Moonshot (OpenAI-compatible) client
+  - `pydantic` (≥2.0.0) — Structured output validation
+  - `Pillow` (≥10.0.0) — Image processing
+  - `numpy` (≥1.24.0) — Numerical operations for blank detection
+  - `python-dotenv` (≥1.0.0) — Environment configuration
+
+- **System Dependencies** (must be installed separately):
+  - [Poppler](https://poppler.freedesktop.org/) — `pdftoppm`, etc. (used by `pdf2image`)
+  - [Tesseract OCR](https://github.com/tesseract-ocr/tesseract) — Used for orientation detection
+  - XeLaTeX — For generating PDF reports (optional, macOS: `brew install --cask mactex`)
+
+## Project Structure
+
+```
+Auto-Grader/
+├── autograder.py              # Main PDF cleaning script
+├── extract_answers.py         # CLI entry for answer extraction
+├── config.py                  # Tunables: AI_MODEL, EXAM_PROFILE, DPI, paths, etc.
+├── extraction/                # Answer extraction package
+│   ├── profiles/              # ExamProfile: prompt + Pydantic schema + answer_fields
+│   ├── providers/             # GeminiProvider, KimiProvider, multi-pass voting
+│   ├── images.py              # Crop, preprocess, JPEG, normalize MC letters
+│   ├── ground_truth.py        # Load GT, fuzzy names, accuracy
+│   ├── reporting.py           # JSON I/O, LaTeX/PDF report, terminal summary
+│   └── eval.py                # extract_first_n_students_eval
+├── bench_pdf_render.py        # Benchmark utility for PDF→image conversion
+├── benchmark_eval_loop.py     # Repeated eval driver (subprocess CLI)
+├── requirements.txt           # Python dependencies
+├── README.md                  # User-facing documentation
+├── AGENTS.md                  # This file
+├── .env                       # API keys and secrets (NOT committed)
+├── .gitignore                 # Excludes .env, outputs, debug files
+├── Ground Truth               # Tab-separated reference answers (local only)
+├── output/                    # Processed PDFs + `{stem}_answers.{json,tex,pdf}`
+├── Space Physics Unit Test Scans/   # Source scanned PDFs (gitignored)
+├── debug/                     # Debug crops (e.g. debug/debug_crops_*)
+└── *_first*_eval.json         # Eval outputs (auto-generated)
+```
+
+## Setup and Installation
+
+```bash
+# 1. Install system dependencies (macOS example)
+brew install poppler tesseract
+
+# 2. Create and activate virtual environment
+python3 -m venv .venv
+source .venv/bin/activate
+
+# 3. Install Python dependencies
+pip install -r requirements.txt
+
+# 4. Configure API keys
+cp .env .env.local  # Edit with your keys
+# Set GOOGLE_API_KEY or GEMINI_API_KEY (Gemini), or MOONSHOT_API_KEY (Kimi)
+```
+
+## Usage
+
+### PDF Preprocessing (autograder.py)
+
+```bash
+# Basic usage
+python autograder.py input.pdf output.pdf
+
+# With custom parameters
+python autograder.py scan.pdf cleaned.pdf \
+    --dpi 200 \
+    --blank-threshold 248 \
+    --blank-std 6
+```
+
+**Parameters**:
+- `--dpi`: Rasterization DPI for OSD analysis (default: 300)
+- `--blank-threshold`: Grayscale mean ≥ this → candidate blank (default: 250)
+- `--blank-std`: Grayscale std ≤ this → candidate blank (default: 6)
+
+### Answer Extraction (extract_answers.py)
+
+```bash
+# Process default PDF (output/20260330135527722.pdf)
+python extract_answers.py
+
+# Process specific PDF
+python extract_answers.py output/some_other.pdf
+
+# Process first N students only (for evaluation)
+python extract_answers.py --first-students 12
+
+# Resume interrupted run (skip already processed pages)
+python extract_answers.py --skip
+```
+
+**Output files** (under `output/` for full runs; eval JSON in project root):
+- `output/{stem}_answers.json` — Structured extraction results
+- `output/{stem}_answers.tex` — LaTeX source for report
+- `output/{stem}_answers.pdf` — Compiled PDF report
+- `debug/debug_crops_{stem}/` — Cropped page images (if enabled)
+
+## Code Organization
+
+### autograder.py
+
+Main functions:
+- `detect_rotation(image)` → int: Uses Tesseract OSD to detect rotation angle (0°, 90°, 180°, 270°)
+- `is_blank_page(image, mean_threshold, std_threshold)` → bool: Detects blank pages using grayscale statistics
+- `_osd_worker(page_num, input_path, dpi)` → tuple: Parallel worker for rotation detection
+- `process_pdf(input_path, output_path, ...)` → None: Main processing pipeline
+
+Processing pipeline:
+1. Render all pages at low DPI (72) for fast blank detection
+2. Filter out pages where mean ≥ threshold AND std ≤ threshold
+3. Run parallel OSD at full DPI (300) on content pages only
+4. Build output PDF with rotation metadata applied
+
+### extract_answers.py + `extraction/`
+
+- **CLI** (`extract_answers.py`): `main()`, argparse, full-PDF loop; loads dotenv once at startup.
+- **Profiles** (`extraction/profiles/`): `ExamProfile` bundles `prompt`, Pydantic `schema`, and `answer_fields`. Selector: `EXAM_PROFILE` in `config.py`.
+- **Providers** (`extraction/providers/`): `GeminiProvider`, `KimiProvider`; `get_provider()`, `call_ocr_api()`, `multi_pass_extract()` for eval.
+- **Ground truth** (`extraction/ground_truth.py`): Fuzzy name matching and accuracy vs reference file.
+- **Eval** (`extraction/eval.py`): `extract_first_n_students_eval()`.
+
+Processing pipeline:
+1. Convert PDF to images at `PDF_DPI` (from `config.py`)
+2. Crop top fraction (`CROP_TOP_FRACTION`); optional preprocess (contrast/sharpness/brightness)
+3. Call configured provider with profile prompt + schema
+4. Compare against ground truth (if available)
+5. Colored terminal output and LaTeX report
+
+### Configuration Constants
+
+**autograder.py**:
+- `ANALYSIS_DPI = 300` — OSD analysis resolution
+- `BLANK_DPI = 72` — Fast blank detection resolution
+- `BLANK_MEAN_THRESHOLD = 250` — Blank page brightness threshold
+- `BLANK_STD_THRESHOLD = 6` — Blank page uniformity threshold
+
+**config.py** (extraction):
+- `AI_MODEL` — Gemini or Kimi model id
+- `EXAM_PROFILE` — e.g. `igcse_physics`
+- `PDF_DPI`, `CROP_TOP_FRACTION`, `PREPROCESS_*`, `GEMINI_*`, `KIMI_*`, `MAX_RETRIES`, `GROUND_TRUTH_PATH`, etc.
+
+## Development Conventions
+
+### Output Naming
+
+Full-run outputs use the input PDF stem under `output/`:
+- Input: `output/20260330135527722.pdf`
+- JSON / TeX / PDF: `output/20260330135527722_answers.{json,tex,pdf}`
+- Debug crops: `debug/debug_crops_20260330135527722/`
+- Eval (`--first-students N`): `{stem}_firstN_eval.json` in the project root
+
+This ensures processing different PDFs doesn't overwrite previous results.
+
+### Debug Image Handling
+
+Set `SAVE_DEBUG_IMAGES = True` in `config.py` to save cropped page images. Debug directories are gitignored.
+
+### Ground Truth Format
+
+The `Ground Truth` file (trailing space in filename) is a tab-separated file:
+
+```
+Ground Truth 
+Yuze     A D B C A C
+Simon    A A B C B C
+...
+```
+
+Format: `Name  Q38_LT  Q39_L  Q40_L  Q38_LB  Q39_R  Q40_R`
+
+### Confidence Levels
+
+Extraction uses three confidence tiers:
+- **high**: Clear, unambiguous markings
+- **medium**: Somewhat faint but readable, minor ambiguity
+- **low**: Significant ambiguity, very faint, or multiple competing marks
+
+## Testing and Evaluation
+
+### Benchmarking PDF Rendering
+
+```bash
+python bench_pdf_render.py [path/to.pdf] --dpi 300
+```
+
+Times the PDF→image conversion without API calls.
+
+### Evaluation Mode
+
+```bash
+python extract_answers.py --first-students 12
+```
+
+Processes only first N pages and compares against ground truth, printing:
+- Per-student accuracy with color-coded terminal output
+- Cumulative accuracy across all processed students
+- Per-field confidence indicators
+
+### Accuracy Calculation
+
+Accuracy is calculated against ground truth using fuzzy name matching (SequenceMatcher ≥ 60% similarity). Each of the 6 answer fields contributes equally to the score.
+
+## Security Considerations
+
+### API Key Management
+
+- API keys are stored in `.env` file (gitignored)
+- Supported variables: `GOOGLE_API_KEY`, `GEMINI_API_KEY`
+- `GOOGLE_API_KEY` takes precedence if both are set
+- Never commit `.env` or any file containing secrets
+
+### Data Privacy
+
+- Scanned exam PDFs contain student names and work — do not commit to public repositories
+- The `Space Physics Unit Test Scans/` directory is gitignored
+- Ground truth files are gitignored (`Ground Truth*`)
+- Debug crop images may contain student information
+
+### LaTeX Compilation
+
+The `generate_report_pdf()` function calls `xelatex` with `-interaction=nonstopmode`. Ensure input data is sanitized to prevent LaTeX injection (the `_tex_escape()` function handles common escape sequences).
+
+## Git Workflow
+
+```bash
+# Pre-commit checklist
+git status
+# Ensure no .env files, no PDF scans, no debug crops are staged
+
+git add autograder.py extract_answers.py  # etc.
+git commit -m "Your message"
+```
+
+**Never commit**:
+- `.env` or `.env.*`
+- `Space Physics Unit Test Scans/`
+- `output/` directory
+- `debug_crops*/` directories
+- `*_answers.{json,tex,pdf}`
+- `Ground Truth*` files
+
+## Troubleshooting
+
+### Tesseract OSD failures
+
+If rotation detection fails consistently, check:
+- Tesseract is installed: `tesseract --version`
+- Image quality is sufficient (try higher `--dpi`)
+
+### Gemini API errors
+
+- Verify `GOOGLE_API_KEY` is set in `.env`
+- Check API quota and rate limits
+- Enable retry with exponential backoff is built-in (3 retries default)
+
+### Poppler errors (pdf2image)
+
+- macOS: `brew install poppler`
+- Ubuntu/Debian: `sudo apt install poppler-utils`
+- Windows: Add poppler `bin/` to PATH
+
+### LaTeX compilation fails
+
+- Install XeLaTeX: `brew install --cask mactex` (macOS)
+- Ensure Chinese font support (uses PingFang SC)
+- Check `xelatex` is in PATH

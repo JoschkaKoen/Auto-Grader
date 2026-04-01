@@ -24,6 +24,9 @@ from pathlib import Path
 # To change the model, edit the line below:
 AI_MODEL = "kimi-k2.5"
 
+# Exam layout + prompt + schema (see extraction/profiles/)
+EXAM_PROFILE = "igcse_physics"
+
 # =============================================================================
 # API Configuration
 # =============================================================================
@@ -111,22 +114,9 @@ KIMI_MAX_TOKENS = 4096
 # Default PDF to process
 DEFAULT_PDF = "output/20260330135527722.pdf"
 
-# Ground truth file path (for accuracy evaluation)
-GROUND_TRUTH_PATH = Path("/Users/joschka/Desktop/Programming/Auto-Grader/Ground Truth ")
+# Ground truth file path (for accuracy evaluation; repo-relative)
+GROUND_TRUTH_PATH = Path(__file__).resolve().parent / "Ground Truth "
 
 # Enable saving debug images (cropped page images)
 SAVE_DEBUG_IMAGES = True
 
-# =============================================================================
-# Answer Fields (do not modify)
-# =============================================================================
-
-# Field names in order (matching ground truth columns)
-ANSWER_FIELDS = [
-    "q38_left_top",
-    "q39_left",
-    "q40_left",
-    "q38_left_bottom",
-    "q39_right",
-    "q40_right",
-]
