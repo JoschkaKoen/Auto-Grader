@@ -20,3 +20,6 @@ debug_crops*/
 
 # Ground-truth / evaluation labels (local only; do not publish)
 Ground Truth*
+
+# Evaluation results folder
+eval/
