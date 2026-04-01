@@ -18,7 +18,7 @@ from pathlib import Path
 # Select which AI model to use for OCR/extraction.
 # Options (exact model names):
 #   - "gemini-3.1-pro-preview"  : Google Gemini 3.1 Pro (highest accuracy)
-#   - "gemini-2.0-flash"        : Google Gemini 2.0 Flash (faster, lower accuracy)
+#   - "gemini-3.0-flash"        : Google Gemini 3.0 Flash (faster, lower accuracy)
 #   - "kimi-k2.5"               : Moonshot Kimi K2.5 (OpenAI-compatible API)
 #
 # Can also be set via AI_MODEL environment variable.
