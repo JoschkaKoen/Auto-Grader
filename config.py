@@ -2,10 +2,32 @@
 """
 config.py
 ---------
-Configuration file for Auto-Grader.
+Configuration for Auto-Grader. Edit values here or set the noted environment
+variables. See README.md and AGENTS.md for full detail.
 
-All tunable parameters for the answer extraction system are defined here.
-Modify values in this file or set corresponding environment variables.
+How to run (from repo root, with venv activated and dependencies installed):
+
+  Setup once:
+    python3 -m venv .venv && source .venv/bin/activate  # Windows: .venv\\Scripts\\activate
+    pip install -r requirements.txt
+    # Create .env with GOOGLE_API_KEY or GEMINI_API_KEY (Gemini) and/or KIMI_API_KEY (Kimi).
+
+  Clean a scan PDF (local only; Poppler + Tesseract):
+    python autograder.py input.pdf output.pdf
+
+  Extract answers — IGCSE-style profile, uses AI_MODEL below (Gemini or Kimi):
+    python extract_answers.py
+    python extract_answers.py "path/to/scan.pdf"
+    python extract_answers.py --first-students N   # eval first N pages vs ground truth
+    python extract_answers.py --skip               # resume from existing JSON
+
+  Grade an exam folder from a natural-language prompt (uses Kimi only; KIMI_API_KEY):
+    python grade.py "check all multiple choice question answers"
+    python grade.py "..." --folder "path/to/exam_folder"
+    # Optional: --dpi N  --no-cleanup  --output-dir DIR  --no-report
+
+Tunables below apply mainly to extract_answers.py / extraction/; pipeline/* and
+grade.py also read PIPELINE_*, NAME_*, etc. from this file.
 """
 
 import os
@@ -116,7 +138,7 @@ KIMI_MAX_TOKENS = 8192
 # Enable extended thinking for kimi-k2.x models.
 # True  → model reasons step-by-step before answering (slower, uses more tokens).
 # False → thinking disabled; faster and cheaper, usually sufficient for OCR.
-KIMI_THINKING = True
+KIMI_THINKING = False
 
 # =============================================================================
 # Paths and File Handling
