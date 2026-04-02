@@ -18,6 +18,8 @@ _PDF_PUA_MULTIPLY = "\uf0b4"
 # Small left→right arrow from Symbol / Wingdings-style PUA (often "" in extracted text).
 _PDF_PUA_ARROW_RIGHT = "\uf0ae"
 _PDF_PUA_ARROW_RIGHT_ALT = "\uf0ee"
+# Bullet from Symbol / Wingdings-style PUA (often "" in extracted mark-scheme lines).
+_PDF_PUA_BULLET = "\uf0b7"
 
 
 def normalize_pdf_multiplication_glyph(text: str) -> str:
@@ -33,6 +35,13 @@ def normalize_pdf_arrow_glyph(text: str) -> str:
         return text
     t = text.replace(_PDF_PUA_ARROW_RIGHT, "→")
     return t.replace(_PDF_PUA_ARROW_RIGHT_ALT, "→")
+
+
+def normalize_pdf_bullet_glyph(text: str) -> str:
+    """Replace PDF bullet PUA (U+F0B7) with Unicode bullet U+2022."""
+    if not text:
+        return text
+    return text.replace(_PDF_PUA_BULLET, "\u2022")
 
 
 # En dash, hyphen-minus, minus sign — used before negative exponents in extracted PDF text.
@@ -54,15 +63,22 @@ def normalize_scientific_powers_of_ten(text: str) -> str:
         t,
     )
     t = re.sub(r"x\s*10\s*(\d+)(?=\D|$)", r"x 10^\1", t)
+    # Mark schemes use a literal exponent letter (e.g. ``10N`` for ``10^N``); do not touch ``10^…``.
+    t = re.sub(
+        r"x\s*10(?!\^)\s*([A-Za-z])(?=$|\s|OR\b|[.,;:])",
+        r"x 10^\1",
+        t,
+    )
     return t
 
 
 def normalize_exam_scientific_text(text: str) -> str:
-    """PUA multiply → ``x``, PUA arrow → ``→``, Unicode ``×`` → ``x``, then ``10^n`` fix."""
+    """PUA multiply → ``x``, arrow → ``→``, bullet → ``•``, Unicode ``×`` → ``x``, then ``10^n`` fix."""
     if not text:
         return text
     t = normalize_pdf_multiplication_glyph(text)
     t = normalize_pdf_arrow_glyph(t)
+    t = normalize_pdf_bullet_glyph(t)
     t = t.replace("×", "x")
     return normalize_scientific_powers_of_ten(t)
 

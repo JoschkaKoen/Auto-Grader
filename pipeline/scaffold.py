@@ -3,8 +3,7 @@
 No AI for structure: question regions follow left-margin numbering (Cambridge-style).
 The list of questions is in **reading order** on the page(s); printed numbers may be out of order.
 Results are cached as ``{folder}/scaffolds/scaffold_cache.json`` and reused if no PDF
-is newer than the cache. Embedded images are written under ``scaffold_images/exam`` and
-``scaffold_images/answers``.
+is newer than the cache. Exam PDF figures are written under ``scaffold_images/exam``.
 """
 
 from __future__ import annotations
@@ -29,11 +28,11 @@ from pipeline.pdf_parser import (
     parse_exam_pdf,
     prepare_scaffold_image_dirs,
 )
-from pipeline.pdf_parser.content import mc_answer_options_display, normalize_multiple_choice_tree
+from pipeline.pdf_parser.content import normalize_multiple_choice_tree
 from pipeline.scaffold_overlay import write_scaffold_boxes_pdf
 
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 8
 
 
 def _find_exam_pdf(folder: Path) -> Path:
@@ -102,27 +101,33 @@ def _wa_from_dict(d: dict) -> WritingArea:
     return WritingArea(bbox=_bbox_from_dict(d["bbox"]), kind=d["kind"])
 
 
-def question_to_dict(q: Question) -> dict:
-    opts = q.answer_options
-    opts_dicts = [{"letter": o.letter, "text": o.text} for o in opts]
-    opts_line = mc_answer_options_display(opts) if opts else None
-    return {
+def question_to_dict(q: Question) -> dict[str, Any]:
+    """Serialize for cache JSON; omit nulls, empty collections, and redundant answer fields."""
+    opts_dicts = [{"letter": o.letter, "text": o.text} for o in q.answer_options]
+    d: dict[str, Any] = {
         "number": q.number,
         "question_type": q.question_type,
         "text": q.text,
-        "answer_options": opts_dicts,
-        "answer_options_text": opts_line,
         "marks": q.marks,
         "bbox": _bbox_to_dict(q.bbox),
-        "answer_field_bbox": _bbox_to_dict(q.answer_field_bbox) if q.answer_field_bbox else None,
-        "images": [_img_to_dict(i) for i in q.images],
-        "writing_areas": [_wa_to_dict(w) for w in q.writing_areas],
-        "subquestions": [question_to_dict(s) for s in q.subquestions],
-        "correct_answer": q.correct_answer,
-        "marking_criteria": q.marking_criteria,
-        "answer_images": [_img_to_dict(i) for i in q.answer_images],
-        "answer_key_text": q.answer_key_text,
     }
+    if opts_dicts:
+        d["answer_options"] = opts_dicts
+    if q.answer_field_bbox is not None:
+        d["answer_field_bbox"] = _bbox_to_dict(q.answer_field_bbox)
+    if q.images:
+        d["images"] = [_img_to_dict(i) for i in q.images]
+    if q.writing_areas:
+        d["writing_areas"] = [_wa_to_dict(w) for w in q.writing_areas]
+    if q.subquestions:
+        d["subquestions"] = [question_to_dict(s) for s in q.subquestions]
+    if q.correct_answer is not None and str(q.correct_answer).strip():
+        d["correct_answer"] = q.correct_answer
+    if q.marking_criteria is not None and str(q.marking_criteria).strip():
+        d["marking_criteria"] = q.marking_criteria
+    if q.answer_images:
+        d["answer_images"] = [_img_to_dict(i) for i in q.answer_images]
+    return d
 
 
 def question_from_dict(d: dict) -> Question:
@@ -138,6 +143,11 @@ def question_from_dict(d: dict) -> Question:
         for x in (d.get("answer_options") or [])
         if isinstance(x, dict) and x.get("letter")
     ]
+    ca = d.get("correct_answer")
+    if ca is None or (isinstance(ca, str) and not str(ca).strip()):
+        leg = d.get("answer_key_text")
+        if leg and str(leg).strip():
+            ca = str(leg).strip()
     return Question(
         number=str(d["number"]),
         question_type=d.get("question_type", "short_answer"),
@@ -150,10 +160,10 @@ def question_from_dict(d: dict) -> Question:
         images=[_img_from_dict(x) for x in d.get("images") or []],
         writing_areas=[_wa_from_dict(x) for x in d.get("writing_areas") or []],
         subquestions=[question_from_dict(s) for s in d.get("subquestions") or []],
-        correct_answer=d.get("correct_answer"),
+        correct_answer=ca,
         marking_criteria=d.get("marking_criteria"),
         answer_images=[_img_from_dict(x) for x in d.get("answer_images") or []],
-        answer_key_text=d.get("answer_key_text"),
+        answer_key_text=None,
         answer_options=ao,
     )
 
@@ -267,8 +277,13 @@ def build_scaffold(folder: Path, client: Any | None = None, dpi: int = 200) -> E
     ans = _find_answer_pdf(folder)
     if ans is not None:
         print(f"[scaffold] Parsing answer key PDF (vector): {ans.name} …")
-        amap = parse_answer_key_pdf(ans, folder)
-        merge_answers_into_scaffold(questions, amap)
+        amap, table_answers, printed_mc = parse_answer_key_pdf(ans, folder)
+        merge_answers_into_scaffold(
+            questions,
+            amap,
+            table_model_answers=table_answers,
+            printed_mc_letters=printed_mc,
+        )
     else:
         print("[scaffold] No answer key PDF found — correct_answer left empty.")
 
