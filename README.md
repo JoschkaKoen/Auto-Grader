@@ -101,53 +101,57 @@ When you run `grade.py`, it executes these steps in order:
 | 1. Parse prompt | `prompt_parser.py` | Converts your plain-English instruction into a structured task (type, student filter, DPI, folder hint) |
 | 2. Find exam folder | `folder_discovery.py` | Resolves the exam folder from `--folder`, the parsed hint, or by scanning for directories named like `*test*` / `*exam*` |
 | 3. Load roster | `student_list.py` | Reads student names from `StudentList.xlsx` in the exam folder |
-| 4. Build scaffold | `scaffold.py` | Parses the exam PDF and answer key to produce a question list with marks and correct answers (cached) |
+| 4. Build scaffold | `scaffold.py` | Parses the exam PDF and answer key to produce a question tree with marks, bounding boxes, and correct answers (cached) |
 | 5. Clean scan | `pdf_cleanup.py` | Rotates pages and removes blanks; skipped with `--no-cleanup` |
 | 6. Assign pages | `page_assignment.py` | Reads the name at the top of each scanned page with Kimi vision and maps pages to roster entries |
-| 7. Detect attempted questions | `answer_detection.py` | One quick Kimi call per page: asks which question numbers the student attempted. Produces a per-student list used in step 8 to skip unanswered questions without making extra API calls |
-| 8. Grade | `grading.py` | For each student, only grades questions flagged as attempted in step 7 (skips the rest with 0 marks). Runs in one of three modes: `check_mc` (multiple choice), `check_answers` (all question types), or `count_marks` (tally red marks written by the teacher — step 7 filter is ignored in this mode) |
-| 9. Print results | `output.py` | Displays scaffold, page assignments, marks table, and accuracy stats in the terminal |
+| 7. Detect attempted questions | `answer_detection.py` | One Kimi call per page: asks which question numbers the student attempted; produces a per-student list used in step 8 to skip unanswered questions |
+| 8. Grade | `grading.py` | Grades only attempted questions. Three modes: `check_mc` (multiple choice), `check_answers` (all types), `count_marks` (tally teacher marks — step 7 filter ignored) |
+| 9. Print results | `output.py` | Displays scaffold, page assignments, marks table, and accuracy in the terminal |
 | 10. Ground truth | `ground_truth.py` | If a ground-truth file exists in the folder, computes and displays per-student accuracy |
 | 11. Generate report | `report.py` | Produces a LaTeX/PDF report with results table and class statistics; skipped with `--no-report` |
 
-### How the blank exam is parsed (scaffold, step 4)
+---
 
-The scaffold is the structured model of the exam: questions, geometry, full question text, writing areas, embedded figures, and (from the answer key) correct answers. **No AI is used** to build it — only **PyMuPDF** on vector PDFs (same idea as Exercise Sheet Generator: left-margin question numbers, vertical slices between numbers). Questions are listed in **reading order** (page → column → top to bottom); **printed numbers may be out of order or repeated** on the paper.
+### How the exam scaffold is built (step 4)
 
-**What goes in:** the exam folder should contain:
+The scaffold is the structured model of the exam: question numbers, stems, answer options, geometry, embedded figures, and correct answers. **No AI is used** — only **PyMuPDF** on vector PDFs, following Cambridge-style left-margin question numbering.
+
+**Exam folder contents required:**
 - A **raw exam PDF** — filename containing `raw` or `exam`, but not `answer` or `scan`
 - An **answer key PDF** (optional) — filename containing `answer`
 
-**How it works (`pipeline/scaffold.py` + `pipeline/pdf_parser/` package):**
+**How it works (`pipeline/scaffold.py` + `pipeline/pdf_parser/`):**
 
-1. **Exam PDF** — Detect Cambridge-style question numbers (`get_text("dict")`, left margin, font size band). For each question, compute vertical regions (including multi-page continuations), then extract exact text in each clip, detect large rectangles / ruled lines as **writing areas**, rasterise embedded images to **`scaffold_images/exam/`**.
-2. **Answer key PDF** — Same numbering and regions on the key file. Full text per question is stored as **`answer_key_text`**; **`correct_answer`** / **`marking_criteria`** are derived with simple rules (e.g. single-letter MC lines); diagrams go to **`scaffold_images/answers/`**.
-3. **Merge** — Rows are matched by question number onto the exam `Question` tree (subquestions supported in the data model; detection can be extended later).
-4. **Cache** — `scaffolds/scaffold_cache.json` in the exam folder (a legacy `scaffold_cache.json` at the folder root is still read once and moved). If no `*.pdf` is newer than the cache, the scaffold reloads from JSON (older caches without the new schema are migrated when possible). Rebuild deletes and recreates **`scaffold_images/`**.
+1. **Exam PDF** — Detect question numbers from left-margin text (`get_text("dict")`, font-size band). Compute vertical regions per question; extract exact stem text; detect rectangles and ruled lines as writing areas; rasterise embedded figures to `scaffold_images/exam/`. Sub-questions (`9a`, `9b`, `11ci`, `11cii`, …) are split from Cambridge-style `(a)` / `(i)` / `(ii)` patterns.
+2. **Answer key PDF** — Parsed as text only; two sources of answers are merged:
+   - **Table rows** `11(a)`, `11(b)`, `11(c)(i)`, `11(c)(ii)` → matched to scaffold ids `11a`, `11b`, `11ci`, `11cii`; model answer text goes to `correct_answer`
+   - **Printed MC lines** `Question 38 (Answer: A)` → letters assigned to matching MC leaves in document order
+3. **Bounding boxes** — Each leaf's `bbox.y0` is pulled down to just below the last text line of the preceding exercise in the same layout cell, so regions don't overlap.
+4. **Cache** — `scaffolds/scaffold_cache.json` (sparse JSON: fields are omitted when null or empty). Reloaded when no PDF is newer than the cache; rebuilt and re-cached automatically otherwise.
 
-**`build_scaffold(folder, client=None)`** ignores `client` (kept for API compatibility). Grading and page assignment still use Kimi elsewhere.
+**`build_scaffold(folder, client=None)`** — `client` is accepted but unused (backward compatibility).
 
-**Output (`Question` nodes, depth-first via `scaffold.all_questions` for grading):**
+**`Question` fields written to `scaffold_cache.json`:**
 
 | Field | Role |
 |-------|------|
-| `number` | Hierarchical label, e.g. `"9"`, `"9a"`, `"9ai"`, `"9aii"`, or `"38_2"` for a second “38” in a column — **not** re-sorted by digit value |
-| `question_type` | `multiple_choice`, `short_answer`, etc. |
-| `text` | Full extracted stem from the exam PDF |
-| `marks` | Parsed from `[N marks]` / similar |
-| `bbox` | PDF points, page (1-based) |
-| `images` / `writing_areas` | Embedded figures and answer-box geometry |
-| `answer_key_text` | Full text region from the answer key |
-| `correct_answer` / `marking_criteria` | Filled from the key |
-| `answer_images` | Images extracted from the key |
+| `number` | Hierarchical label: `"9"`, `"9a"`, `"9ai"`, `"38_2"` (duplicate in column) |
+| `question_type` | `multiple_choice` / `short_answer` / `calculation` / `long_answer` |
+| `text` | Stem text (MC: stem only; options in `answer_options`) |
+| `marks` | Parsed from `[N marks]` / `[N]` |
+| `bbox` | PDF points + 1-based page number |
+| `answer_options` | MC options list `{letter, text}` (omitted for non-MC) |
+| `correct_answer` | Model answer from the answer key (omitted if unknown) |
+| `marking_criteria` | Additional marking guidance (omitted if none) |
+| `images` | Embedded exam figures (omitted if none) |
+| `writing_areas` | Detected answer boxes/lines (omitted if none) |
+| `subquestions` | Nested sub-parts (omitted for leaves) |
 
 ---
 
 ## Configuration
 
-All tunables live in `config.py`: AI model, DPI, crop fractions, API retry settings, and more. The file is commented — edit it directly or override values with environment variables.
-
-Key settings:
+All tunables live in `config.py`: AI model, DPI, crop fractions, API retry settings, and more.
 
 | Setting | Purpose |
 |---------|---------|
@@ -160,7 +164,7 @@ Key settings:
 
 ## Ground truth
 
-Both tools support accuracy evaluation, but they use separate files and code:
+Both tools support accuracy evaluation, but they use separate files:
 
 | | `extract_answers.py` | `grade.py` |
 |---|---|---|
@@ -173,17 +177,22 @@ Both tools support accuracy evaluation, but they use separate files and code:
 ## Project layout
 
 ```
-autograder.py        PDF cleaning
-extract_answers.py   Profile-based extraction CLI
+autograder.py        PDF cleaning (rotation + blank removal)
+extract_answers.py   Profile-based answer extraction CLI
 grade.py             Prompt-driven grading CLI
 config.py            Models, DPI, paths, and all tunables
-extraction/          Profiles, AI providers, eval, reporting
-pipeline/            Folder discovery, pdf_parser (vector scaffold), grading, reports
-AGENTS.md            Deep reference for maintainers and agents
+extraction/          Profiles, AI providers, eval, reporting (extract_answers.py)
+pipeline/            Full grading pipeline modules (grade.py)
+  pdf_parser/        Vector PDF exam parser (scaffold builder)
+  scaffold.py        Scaffold cache: build, load, save
+  grading.py         Per-student grading logic
+  report.py          LaTeX/PDF report generation
+  models.py          Shared data structures (Question, BBox, …)
+AGENTS.md            Deep reference for maintainers and AI agents
 ```
 
 ---
 
 ## Security
 
-Do not commit `.env`, scans, or ground-truth files containing student data. Sensitive paths are gitignored by design.
+Do not commit `.env`, scans, ground-truth files, or any file containing student data. These paths are gitignored by design.
