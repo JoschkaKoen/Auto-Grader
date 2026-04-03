@@ -21,6 +21,11 @@ def exam_artifact_dir(exam_folder: Path, output_base: str | Path = "output") -> 
 
 
 def artifact_scaffold_cache_path(artifact_dir: Path) -> Path:
+    return artifact_dir / "scaffold_cache.json"
+
+
+def legacy_artifact_scaffold_cache_path(artifact_dir: Path) -> Path:
+    """Older layout: cache lived under ``scaffolds/`` inside *artifact_dir*."""
     return artifact_dir / "scaffolds" / "scaffold_cache.json"
 
 
@@ -43,6 +48,7 @@ def find_scaffold_cache_file(
     ad = exam_artifact_dir(exam_folder, output_base)
     for p in (
         artifact_scaffold_cache_path(ad),
+        legacy_artifact_scaffold_cache_path(ad),
         exam_folder / "scaffolds" / "scaffold_cache.json",
         exam_folder / "scaffold_cache.json",
     ):

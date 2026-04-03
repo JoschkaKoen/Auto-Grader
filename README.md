@@ -120,7 +120,7 @@ The scaffold is the structured model of the exam: question numbers, stems, answe
    - **Table rows** `11(a)`, `11(b)`, `11(c)(i)`, `11(c)(ii)` → matched to scaffold ids `11a`, `11b`, `11ci`, `11cii`; model answer text goes to `correct_answer`
    - **Printed MC lines** `Question 38 (Answer: A)` → letters assigned to matching MC leaves in document order
 3. **Bounding boxes** — Each leaf's `bbox.y0` is pulled down to just below the last text line of the preceding exercise in the same layout cell, so regions don't overlap.
-4. **Cache** — `scaffolds/scaffold_cache.json` under the run directory (sparse JSON: fields are omitted when null or empty). Reloaded when no source PDF is newer than the cache; rebuilt and re-cached automatically otherwise. Legacy caches still under the exam folder are migrated on first load.
+4. **Cache** — `scaffold_cache.json` in the run directory (sparse JSON: fields are omitted when null or empty). Reloaded when no source PDF is newer than the cache; rebuilt and re-cached automatically otherwise. Legacy caches still under the exam folder (or older `scaffolds/scaffold_cache.json` in a run folder) are still found until rewritten.
 
 **`build_scaffold(folder, client=None, artifact_dir=...)`** — `client` is unused (backward compatibility). `grade.py` passes a per-run `artifact_dir`; the default helper is `exam_artifact_dir()` for other callers.
 

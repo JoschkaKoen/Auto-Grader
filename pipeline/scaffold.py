@@ -2,7 +2,7 @@
 
 No AI for structure: question regions follow left-margin numbering (Cambridge-style).
 The list of questions is in **reading order** on the page(s); printed numbers may be out of order.
-Results are cached under ``{artifact_dir}/scaffolds/scaffold_cache.json`` (default
+Results are cached under ``{artifact_dir}/scaffold_cache.json`` (default
 ``output/<exam_stem>/`` via :func:`pipeline.exam_paths.exam_artifact_dir`) and reused
 if no source PDF is newer than the cache. Exam PDF figures go under
 ``{artifact_dir}/scaffold_images``.
@@ -29,6 +29,7 @@ from pipeline.exam_paths import (
     artifact_overlays_dir,
     artifact_scaffold_cache_path,
     exam_artifact_dir,
+    legacy_artifact_scaffold_cache_path,
     safe_path_stem,
 )
 from pipeline.pdf_parser import (
@@ -203,6 +204,7 @@ def _legacy_scaffold_subdir_cache(folder: Path) -> Path:
 def _effective_cache_path(folder: Path, artifact_dir: Path) -> Path | None:
     for p in (
         artifact_scaffold_cache_path(artifact_dir),
+        legacy_artifact_scaffold_cache_path(artifact_dir),
         _legacy_scaffold_subdir_cache(folder),
         _legacy_cache_path(folder),
     ):
@@ -255,7 +257,6 @@ def _migrate_scaffold_cache_to_artifact(
 ) -> None:
     """Copy scaffold JSON + images into *artifact_dir* and remove legacy copies in *exam_folder*."""
     artifact_dir.mkdir(parents=True, exist_ok=True)
-    (artifact_dir / "scaffolds").mkdir(parents=True, exist_ok=True)
     _save_cache(artifact_dir, scaffold)
     src_img = exam_folder / "scaffold_images"
     dst_img = artifact_dir / "scaffold_images"
@@ -320,6 +321,18 @@ def _save_cache(artifact_dir: Path, scaffold: ExamScaffold) -> None:
     out.parent.mkdir(parents=True, exist_ok=True)
     with open(out, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2, ensure_ascii=False)
+    leg = legacy_artifact_scaffold_cache_path(artifact_dir)
+    if leg.is_file():
+        try:
+            leg.unlink()
+        except OSError:
+            pass
+        try:
+            sd = artifact_dir / "scaffolds"
+            if sd.is_dir() and not any(sd.iterdir()):
+                sd.rmdir()
+        except OSError:
+            pass
 
 
 def build_scaffold(

@@ -162,6 +162,7 @@ def _run(args: argparse.Namespace, timestamp: str) -> None:
     )
 
     from pipeline.answer_detection import detect_answered_exercises
+    from pipeline.exam_paths import artifact_scaffold_cache_path, legacy_artifact_scaffold_cache_path
     from pipeline.folder_discovery import find_folder
     from pipeline.grading import grade_students
     from pipeline.ground_truth import evaluate_results, find_ground_truth_file, load_ground_truth
@@ -279,7 +280,8 @@ def _run(args: argparse.Namespace, timestamp: str) -> None:
     pipeline_step(4, "Build exam scaffold")
     if rescaffold:
         for cache_p in (
-            artifact_dir / "scaffolds" / "scaffold_cache.json",
+            artifact_scaffold_cache_path(artifact_dir),
+            legacy_artifact_scaffold_cache_path(artifact_dir),
             folder / "scaffolds" / "scaffold_cache.json",
             folder / "scaffold_cache.json",
         ):
