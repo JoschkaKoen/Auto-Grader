@@ -12,14 +12,8 @@ How to run (from repo root, with venv activated and dependencies installed):
     pip install -r requirements.txt
     # Create .env with GOOGLE_API_KEY or GEMINI_API_KEY (Gemini) and/or KIMI_API_KEY (Kimi).
 
-  Extract answers — IGCSE-style profile, uses AI_MODEL below (Gemini or Kimi):
-    python scripts/extract_answers.py
-    python scripts/extract_answers.py "path/to/scan.pdf"
-    python scripts/extract_answers.py --first-students N   # eval first N pages vs ground truth
-    python scripts/extract_answers.py --skip               # resume from existing JSON
-
-  Activate the virtual environment: 
-    source .venv/bin/activate 
+  Activate the virtual environment:
+    source .venv/bin/activate
 
   Grade an exam folder from a natural-language prompt (uses Kimi only; KIMI_API_KEY):
     python grade.py "check all multiple choice question answers"
@@ -27,8 +21,8 @@ How to run (from repo root, with venv activated and dependencies installed):
     # Optional CLI (also inferable from prompt JSON): --dpi  --folder  --skip-clean-scan
     #   --force-clean-scan  --rescaffold  --through-step N  --no-report
 
-Tunables below apply mainly to scripts/extract_answers.py / extraction/; pipeline/* and
-grade.py also read PIPELINE_*, NAME_*, etc. from this file.
+Tunables below apply to extraction/ (library), pipeline/*, and grade.py
+(PIPELINE_*, NAME_*, etc.).
 """
 
 import os

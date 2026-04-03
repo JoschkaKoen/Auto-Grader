@@ -32,8 +32,9 @@ Install system dependencies:
 
 | Goal | Tool |
 |------|------|
-| Extract answers from a fixed layout (e.g. IGCSE Physics MC) | `scripts/extract_answers.py` |
 | Grade a full exam folder from a plain-English prompt (includes scan clean + deskew) | `grade.py` |
+
+The `extraction/` package (profiles, providers, eval) remains available for custom scripts or tooling you add locally.
 
 Scan rotation, blank-page removal, and fine deskew are implemented in `pipeline/scan_preprocess.py` and `pipeline/scan_deskew.py`, invoked automatically by `pipeline/pdf_cleanup.py` when you run `grade.py`.
 
@@ -53,21 +54,6 @@ These A3-portrait scans contain two A4 exam sheets per page (top half and bottom
 The toolchain **never overwrites the original scan PDF**: `scan_preprocess.process_pdf` refuses identical input/output paths, and deskew writes via a temp file before replacing `cleaned_scan.pdf` under the run directory.
 
 `pipeline/pdf_cleanup.py` runs fine deskew automatically (pass 3) when called from `grade.py`. Pass `deskew=False` to disable.
-
----
-
-## `scripts/extract_answers.py` — profile-based extraction
-
-Reads answers from fixed regions defined by `EXAM_PROFILE` in `config.py`. The default profile targets IGCSE Physics multiple choice. Supports Gemini or Kimi (set `AI_MODEL` in `config.py`).
-
-```bash
-python scripts/extract_answers.py                      # run on DEFAULT_PDF
-python scripts/extract_answers.py "path/to/scan.pdf"   # run on a specific file
-python scripts/extract_answers.py --first-students 12  # eval first 12 pages vs ground truth
-python scripts/extract_answers.py --skip               # resume from existing JSON
-```
-
-Full-run output is written under `output/extract_answers/<pdf_stem_sanitized>/` (JSON, TeX, PDF). Evaluation mode also prints colour-coded accuracy.
 
 ---
 
@@ -162,22 +148,16 @@ All tunables live in `config.py`: AI model, DPI, crop fractions, API retry setti
 
 | Setting | Purpose |
 |---------|---------|
-| `AI_MODEL` | Model for `scripts/extract_answers.py` (`gemini-*` or `kimi-*`) |
+| `AI_MODEL` | Default model hint for `extraction/` providers (`gemini-*` or `kimi-*`) |
 | `PIPELINE_AI_MODEL` | Model for `grade.py` |
 | `PDF_DPI` | DPI for image conversion |
-| `EXAM_PROFILE` | Layout profile for `scripts/extract_answers.py` |
+| `EXAM_PROFILE` | Layout profile when using `extraction/` programmatically |
 
 ---
 
 ## Ground truth
 
-Both tools support accuracy evaluation, but they use separate files:
-
-| | `scripts/extract_answers.py` | `grade.py` |
-|---|---|---|
-| File location | `GROUND_TRUTH_PATH` in `config.py` | Inside the exam folder |
-| Compared against | Per-page extraction records | `StudentResult` from the pipeline |
-| Implementation | `extraction/ground_truth.py` | `pipeline/ground_truth.py` |
+`grade.py` evaluates against a ground-truth file in the exam folder when present (`pipeline/ground_truth.py`). The `extraction/ground_truth.py` helpers target `GROUND_TRUTH_PATH` in `config.py` if you build your own tooling on top of `extraction/`.
 
 ---
 
@@ -185,9 +165,8 @@ Both tools support accuracy evaluation, but they use separate files:
 
 ```
 grade.py             Prompt-driven grading CLI
-scripts/             Standalone CLIs (extract_answers, bench_pdf_render, visualize_*)
 config.py            Models, DPI, paths, and all tunables
-extraction/          Profiles, AI providers, eval, reporting (used by scripts/extract_answers.py)
+extraction/          Profiles, AI providers, eval, reporting (library)
 pipeline/            Full grading pipeline modules (grade.py)
   scan_preprocess.py OSD rotation + blank-page removal (pikepdf)
   pdf_cleanup.py     Class scan clean + deskew orchestration

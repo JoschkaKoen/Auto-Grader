@@ -13,7 +13,7 @@ def write_reflines_debug_pdf(deskewed_pdf: Path, dpi: int) -> Path | None:
     """Draw vertical reflines + anchor crosshairs from the deskew sidecar.
 
     Not invoked from :func:`write_scan_debug_pdfs_after_deskew` by default; call this
-    explicitly (or use ``scripts/visualize_scan_overlays.py --reflines-overlay``) if you need
+    explicitly if you need
     the PDF for debugging.
     """
     deskewed_pdf = Path(deskewed_pdf)
@@ -72,7 +72,7 @@ def write_projected_scaffold_debug_pdf(
         msg = (
             "Skip projected overlay: scaffold from "
             f"{exam_for_scaffold.name!r} but anchors use {raw4.name!r}. "
-            "Use the same 4-up file or scripts/visualize_scan_overlays.py --force-projected."
+            "Use the same 4-up file for scaffold and anchors, or pass force_layout_mismatch."
         )
         (warn_line if verbose else info_line)(f"[scan_overlays] {msg}")
         return None
