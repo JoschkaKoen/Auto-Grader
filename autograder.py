@@ -24,6 +24,7 @@ import argparse
 import os
 import shutil
 import sys
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
@@ -102,7 +103,9 @@ def process_pdf(input_path: str,
                 output_path: str,
                 analysis_dpi: int = ANALYSIS_DPI,
                 blank_mean: float = BLANK_MEAN_THRESHOLD,
-                blank_std: float = BLANK_STD_THRESHOLD) -> None:
+                blank_std: float = BLANK_STD_THRESHOLD,
+                *,
+                verbose: bool = True) -> None:
 
     input_path = Path(input_path)
     output_path = Path(output_path)
@@ -120,21 +123,33 @@ def process_pdf(input_path: str,
         err_line(f"Input file not found: {input_path}")
         sys.exit(1)
 
-    print()
-    print(paint(f"  {icon('doc')}  autograder  —  {input_path.name}", CYAN, BOLD))
-    note_line(f"Full path: {input_path}")
-    note_line(
-        f"Analysis DPI: {analysis_dpi}  |  Blank: mean≥{blank_mean}, std≤{blank_std}"
-    )
+    if verbose:
+        print()
+        print(paint(f"  {icon('doc')}  autograder  —  {input_path.name}", CYAN, BOLD))
+        note_line(f"Full path: {input_path}")
+        note_line(
+            f"Analysis DPI: {analysis_dpi}  |  Blank: mean≥{blank_mean}, std≤{blank_std}"
+        )
+    else:
+        note_line(
+            f"autograder: {input_path.name}  |  OSD {analysis_dpi} DPI  |  "
+            f"blank mean≥{blank_mean}, std≤{blank_std}"
+        )
 
     # ------------------------------------------------------------------
     # Pass 1: Fast blank detection at low DPI
     # ------------------------------------------------------------------
-    print(paint(f"\n  {icon('broom')}  Pass 1: blank detection @ {BLANK_DPI} DPI", CYAN, BOLD))
+    if verbose:
+        print(paint(f"\n  {icon('broom')}  Pass 1: blank detection @ {BLANK_DPI} DPI", CYAN, BOLD))
+    else:
+        note_line(f"Pass 1: blank detection @ {BLANK_DPI} DPI")
     low_res_pages = convert_from_path(str(input_path), dpi=BLANK_DPI,
                                           grayscale=True, thread_count=os.cpu_count() or 4)
     total_pages = len(low_res_pages)
-    print(f"Total pages: {total_pages}")
+    if verbose:
+        print(f"Total pages: {total_pages}")
+    else:
+        note_line(f"{total_pages} pages scanned")
 
     content_page_nums = []  # 1-indexed page numbers
     blank_page_nums = []
@@ -146,7 +161,13 @@ def process_pdf(input_path: str,
         else:
             content_page_nums.append(page_num)
 
-    print(f"  → {len(blank_page_nums)} blank pages, {len(content_page_nums)} content pages")
+    if verbose:
+        print(f"  → {len(blank_page_nums)} blank pages, {len(content_page_nums)} content pages")
+    else:
+        note_line(
+            f"→ {len(blank_page_nums)} blank, {len(content_page_nums)} content pages "
+            "(blank source pages are dropped from the output PDF)"
+        )
 
     # Free low-res images
     del low_res_pages
@@ -159,14 +180,20 @@ def process_pdf(input_path: str,
     # Pass 2: Parallel OSD at full DPI (content pages only)
     # ------------------------------------------------------------------
     num_workers = min(os.cpu_count() or 4, len(content_page_nums))
-    print(
-        paint(
-            f"\n  {icon('gear')}  Pass 2: OSD rotation on {len(content_page_nums)} pages "
-            f"@ {analysis_dpi} DPI ({num_workers} workers)",
-            CYAN,
-            BOLD,
+    if verbose:
+        print(
+            paint(
+                f"\n  {icon('gear')}  Pass 2: OSD rotation on {len(content_page_nums)} pages "
+                f"@ {analysis_dpi} DPI ({num_workers} workers)",
+                CYAN,
+                BOLD,
+            )
         )
-    )
+    else:
+        note_line(
+            f"Pass 2: OSD on {len(content_page_nums)} pages @ {analysis_dpi} DPI "
+            f"({num_workers} workers)"
+        )
 
     rotation_map: dict[int, int] = {}
     input_str = str(input_path)
@@ -183,13 +210,24 @@ def process_pdf(input_path: str,
     # ------------------------------------------------------------------
     # Print summary
     # ------------------------------------------------------------------
-    print(paint(f"\n  {icon('chart')}  Rotation summary", CYAN, BOLD))
-    for pn in sorted(rotation_map):
-        angle = rotation_map[pn]
-        status = f"rotate {angle}°" if angle != 0 else "ok"
-        print(f"  Page {pn:>3}: {status}")
-    for pn in sorted(blank_page_nums):
-        print(f"  Page {pn:>3}: blank (removed)")
+    if verbose:
+        print(paint(f"\n  {icon('chart')}  Rotation summary", CYAN, BOLD))
+        for pn in sorted(rotation_map):
+            angle = rotation_map[pn]
+            status = f"rotate {angle}°" if angle != 0 else "ok"
+            print(f"  Page {pn:>3}: {status}")
+        for pn in sorted(blank_page_nums):
+            print(f"  Page {pn:>3}: blank (removed)")
+    else:
+        angle_counts = Counter(rotation_map.values())
+        parts: list[str] = []
+        for angle in sorted(angle_counts):
+            n = angle_counts[angle]
+            if angle == 0:
+                parts.append(f"{n} upright")
+            else:
+                parts.append(f"{n} rotate {angle}°")
+        note_line("Rotation: " + ", ".join(parts) if parts else "no content pages")
 
     # ------------------------------------------------------------------
     # Build output PDF with pikepdf (lossless)
@@ -219,7 +257,8 @@ def process_pdf(input_path: str,
     src_pdf.close()
 
     ok_line("Passes 1–2 complete (rotate + de-blank).")
-    print()
+    if verbose:
+        print()
 
 
 # ---------------------------------------------------------------------------
@@ -260,6 +299,7 @@ def main():
         analysis_dpi=args.dpi,
         blank_mean=args.blank_threshold,
         blank_std=args.blank_std,
+        verbose=True,
     )
 
     if args.deskew:
@@ -273,6 +313,7 @@ def main():
                 output_pdf=tmp_deskew,
                 dpi=args.dpi,
                 reflines_sidecar=out_p.with_name(f"{out_p.stem}_reflines.json"),
+                verbose=True,
             )
             shutil.move(str(tmp_deskew), str(out_p))
         except Exception:
@@ -281,7 +322,7 @@ def main():
             raise
         from pipeline.scan_overlays import write_scan_debug_pdfs_after_deskew
 
-        write_scan_debug_pdfs_after_deskew(out_p.parent, out_p, args.dpi)
+        write_scan_debug_pdfs_after_deskew(out_p.parent, out_p, args.dpi, verbose=True)
         from pipeline.terminal_ui import ok_line
 
         ok_line("Deskew + projected overlay (if applicable) complete.")

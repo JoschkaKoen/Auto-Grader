@@ -38,48 +38,56 @@ def write_projected_scaffold_debug_pdf(
     dpi: int,
     *,
     force_layout_mismatch: bool = False,
+    verbose: bool = True,
 ) -> Path | None:
     """Project scaffold bboxes onto *deskewed_pdf* using 4-up anchors + reflines JSON."""
     from pipeline.bbox_projection import find_raw_four_up_pdf, overlay_projected_scaffold_on_scan_pdf
     from pipeline.exam_paths import exam_artifact_dir
     from pipeline.scaffold import _find_exam_pdf, build_scaffold
+    from pipeline.terminal_ui import info_line, warn_line
 
     folder = Path(folder)
     deskewed_pdf = Path(deskewed_pdf)
 
     raw4 = find_raw_four_up_pdf(folder)
     if raw4 is None:
-        print(
-            "[scan_overlays] No *4up* raw exam PDF — skip projected scaffold overlay "
-            "(needs four-up IGCSE header anchors)."
+        msg = (
+            "No *4up* raw exam PDF — skip projected overlay (needs four-up IGCSE anchors)."
         )
+        (warn_line if verbose else info_line)(f"[scan_overlays] {msg}")
         return None
 
     try:
         exam_for_scaffold = _find_exam_pdf(folder)
     except FileNotFoundError:
-        print("[scan_overlays] No raw exam PDF — skip projected overlay")
+        (warn_line if verbose else info_line)("[scan_overlays] No raw exam PDF — skip projected overlay")
         return None
 
     if not force_layout_mismatch and exam_for_scaffold.resolve() != raw4.resolve():
-        print(
-            "[scan_overlays] Skip projected overlay: scaffold was built from "
+        msg = (
+            "Skip projected overlay: scaffold from "
             f"{exam_for_scaffold.name!r} but anchors use {raw4.name!r}. "
-            "Use the same 4-up file for scaffold + projection, or run "
-            "scripts/visualize_scan_overlays.py --force-projected."
+            "Use the same 4-up file or scripts/visualize_scan_overlays.py --force-projected."
         )
+        (warn_line if verbose else info_line)(f"[scan_overlays] {msg}")
         return None
 
     try:
-        scaffold = build_scaffold(folder, artifact_dir=exam_artifact_dir(folder))
+        scaffold = build_scaffold(
+            folder,
+            artifact_dir=exam_artifact_dir(folder),
+            quiet=not verbose,
+        )
         roots = scaffold.questions
     except Exception as e:
-        print(f"[scan_overlays] Could not load scaffold: {e}")
+        warn_line(f"[scan_overlays] Could not load scaffold: {e}")
         return None
 
     sidecar = deskewed_pdf.with_name(deskewed_pdf.stem + "_reflines.json")
     if not sidecar.is_file():
-        print("[scan_overlays] Missing reflines JSON — skip projected overlay")
+        (warn_line if verbose else info_line)(
+            "[scan_overlays] Missing reflines JSON — skip projected overlay"
+        )
         return None
 
     out = deskewed_pdf.with_name(deskewed_pdf.stem + "_projected_boxes.pdf")
@@ -91,10 +99,11 @@ def write_projected_scaffold_debug_pdf(
             roots,
             out,
             dpi=dpi,
+            verbose=verbose,
         )
         return out
     except Exception as e:
-        print(f"[scan_overlays] Projected scaffold overlay failed: {e}")
+        warn_line(f"[scan_overlays] Projected scaffold overlay failed: {e}")
         return None
 
 
@@ -106,6 +115,7 @@ def write_scan_debug_pdfs_after_deskew(
     force_projected_mismatch: bool = False,
     write_reflines: bool = False,
     write_projected: bool = True,
+    verbose: bool = False,
 ) -> None:
     """After a successful deskew, write optional debug PDFs next to *deskewed_pdf*."""
     if write_reflines:
@@ -116,4 +126,5 @@ def write_scan_debug_pdfs_after_deskew(
             deskewed_pdf,
             dpi,
             force_layout_mismatch=force_projected_mismatch,
+            verbose=verbose,
         )

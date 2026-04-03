@@ -329,12 +329,14 @@ def build_scaffold(
     *,
     artifact_dir: Path | None = None,
     output_base: str | Path = "output",
+    quiet: bool = False,
 ) -> ExamScaffold:
     """Build (or load from cache) the ExamScaffold for the exam in *folder*.
 
     Derived files (cache, ``scaffold_images``, overlay PDF) go under *artifact_dir*
     (default: ``output/<exam_stem>/``). *client* is optional and unused.
     *dpi* is unused; parsing is vector-based.
+    *quiet*: when True, omit cache-hit log lines (e.g. projected overlay helper).
     """
     _ = client, dpi
     from pipeline.terminal_ui import tool_line
@@ -343,16 +345,18 @@ def build_scaffold(
 
     if _is_cache_valid(folder, ad):
         try:
-            tool_line("scaffold", "Loading scaffold from cache …")
+            if not quiet:
+                tool_line("scaffold", "Loading scaffold from cache …")
             loaded_path = _effective_cache_path(folder, ad)
             scaffold = _load_cache(folder, ad)
             if loaded_path is not None and _cache_path_under_exam_folder(
                 loaded_path, folder
             ):
-                tool_line(
-                    "scaffold",
-                    "Migrating scaffold cache and images from exam folder → output …",
-                )
+                if not quiet:
+                    tool_line(
+                        "scaffold",
+                        "Migrating scaffold cache and images from exam folder → output …",
+                    )
                 _migrate_scaffold_cache_to_artifact(folder, ad, scaffold)
             return scaffold
         except (ValueError, KeyError, TypeError, json.JSONDecodeError):

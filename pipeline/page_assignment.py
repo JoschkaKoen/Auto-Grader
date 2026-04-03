@@ -84,10 +84,13 @@ def assign_pages(
     dpi: int = 200,
     client: Any | None = None,
     name_crop_fraction: float = 0.15,
+    *,
+    verbose: bool = True,
 ) -> list[PageAssignment]:
     """Return a ``PageAssignment`` for every student whose pages were found.
 
     If *client* is None it is created via ``KimiProvider.create_client()``.
+    *verbose*: when False (``grade.py``), log only sparse progress instead of every page.
     """
     from extraction.ground_truth import fuzzy_match_name
     from pdf2image import convert_from_path
@@ -98,10 +101,12 @@ def assign_pages(
     if client is None:
         raise RuntimeError("No Kimi client available for page assignment.")
 
-    from pipeline.terminal_ui import info_line, tool_line
+    from pipeline.terminal_ui import info_line, note_line, tool_line
 
     tool_line("page_assignment", f"Rendering {cleaned_pdf.name} at {dpi} DPI …")
     pages = convert_from_path(str(cleaned_pdf), dpi=dpi, thread_count=os.cpu_count() or 4)
+    n_pages = len(pages)
+    step = max(1, n_pages // 8) if not verbose and n_pages > 1 else 1
 
     # For each page: ask Kimi for the student name (or empty string)
     raw_names: list[str] = []
@@ -113,9 +118,15 @@ def assign_pages(
             name = json.loads(raw).get("name", "").strip()
         except (json.JSONDecodeError, AttributeError):
             name = ""
-        info_line(f"Page {i:3d}/{len(pages)}: raw name = {name!r}")
+        if verbose or i == 1 or i == n_pages or (i % step == 0):
+            info_line(f"Page {i:3d}/{n_pages}: raw name = {name!r}")
         raw_names.append(name)
         time.sleep(0.2)  # light rate-limit
+    if not verbose and n_pages > 1:
+        note_line(
+            f"Name OCR: {n_pages} pages "
+            f"(sampled every {step} pages plus first/last; use verbose for all lines)"
+        )
 
     # Fuzzy-match each raw name; empty → "UNKNOWN"
     matched: list[str | None] = []

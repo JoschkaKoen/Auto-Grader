@@ -331,6 +331,7 @@ def _run(args: argparse.Namespace, timestamp: str) -> None:
         dpi=NAME_RECOGNITION_DPI,
         client=client,
         name_crop_fraction=NAME_CROP_FRACTION,
+        verbose=False,
     )
     print_page_summary(page_map, students)
     if through_step == 6:

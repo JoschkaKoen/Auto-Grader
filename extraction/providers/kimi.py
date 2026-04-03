@@ -96,20 +96,30 @@ def _failed_record(last_error: Exception | str | None, answer_fields: list[str])
 class KimiProvider:
     @staticmethod
     def create_client() -> Any | None:
+        def _warn(msg: str) -> None:
+            try:
+                from pipeline.terminal_ui import warn_line
+                warn_line(msg)
+            except Exception:
+                print(msg)
+
+        def _note(msg: str) -> None:
+            try:
+                from pipeline.terminal_ui import note_line
+                note_line(msg)
+            except Exception:
+                print(msg)
+
         if not KIMI_AVAILABLE:
-            print("Warning: OpenAI package not installed. Run: pip install openai")
+            _warn("OpenAI package not installed. Run: pip install openai")
             return None
         api_key = os.getenv("KIMI_API_KEY")
         if not api_key:
-            print("Warning: KIMI_API_KEY not set. Kimi will not be available.")
+            _warn("KIMI_API_KEY not set. Kimi will not be available.")
             return None
-        
-        # Support custom base URL for different regions (China vs international)
-        # Default: https://api.moonshot.cn/v1 (international)
-        # For China users, set KIMI_BASE_URL in .env if different
+
         base_url = os.getenv("KIMI_BASE_URL", "https://api.moonshot.cn/v1")
-        
-        print(f"[INFO] Connecting to Kimi API at: {base_url}")
+        _note(f"Connecting to Kimi API at: {base_url}")
         
         assert _OpenAIClient is not None
         return _OpenAIClient(api_key=api_key, base_url=base_url)

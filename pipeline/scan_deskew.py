@@ -272,6 +272,8 @@ def extract_igcse_template(
     top_half_gray: np.ndarray,
     search_height: int = _ANCHOR_SEARCH_HEIGHT,
     padding: int = _ANCHOR_TEMPLATE_PADDING,
+    *,
+    verbose: bool = True,
 ) -> np.ndarray:
     """Bootstrap the IGCSE label template from the left sub-page of *top_half_gray*.
 
@@ -326,10 +328,11 @@ def extract_igcse_template(
     y1 = min(strip.shape[0], best_bbox[3] + padding)
 
     template = strip[y0:y1, x0:x1].copy()
-    print(
-        f"[deskew] IGCSE template: {template.shape[1]}x{template.shape[0]}px "
-        f"at bbox=({x0},{y0},{x1},{y1})  OCR conf={best_conf}"
-    )
+    if verbose:
+        print(
+            f"[deskew] IGCSE template: {template.shape[1]}x{template.shape[0]}px "
+            f"at bbox=({x0},{y0},{x1},{y1})  OCR conf={best_conf}"
+        )
     return template
 
 
@@ -451,6 +454,7 @@ def deskew_pdf_raster(
     dpi: int = 300,
     *,
     reflines_sidecar: Path | None = None,
+    verbose: bool = True,
 ) -> Path:
     """Rasterize *input_pdf*, deskew each page (per half), detect reference
     lines, write *output_pdf* and a sidecar JSON file.
@@ -468,6 +472,8 @@ def deskew_pdf_raster(
             Defaults to ``output_pdf.with_name(output_pdf.stem + "_reflines.json")``.
             Use this when *output_pdf* is a temp file but the sidecar should use
             the final output stem (e.g. ``cleaned_scan_reflines.json``).
+        verbose: When False (e.g. ``grade.py`` pipeline), print only summaries instead
+            of per-page angle, line, and anchor lines.
 
     Returns:
         Path to the written output PDF.
@@ -484,11 +490,17 @@ def deskew_pdf_raster(
             "then Path.replace() if you need to update the original path."
         )
 
-    from pipeline.terminal_ui import ok_line, tool_line
+    from pipeline.terminal_ui import note_line, ok_line, tool_line
 
-    print()
-    tool_line("deskew", f"Rendering {input_pdf.name} at {dpi} DPI …")
-    tool_line("deskew", "Angle detection: full-resolution halves (no proxy downsample)")
+    if verbose:
+        print()
+        tool_line("deskew", f"Rendering {input_pdf.name} at {dpi} DPI …")
+        tool_line("deskew", "Angle detection: full-resolution halves (no proxy downsample)")
+    else:
+        tool_line(
+            "deskew",
+            f"Fine deskew {input_pdf.name} @ {dpi} DPI (per-page detail suppressed) …",
+        )
     pages = convert_from_path(
         str(input_pdf),
         dpi=dpi,
@@ -496,7 +508,10 @@ def deskew_pdf_raster(
         thread_count=os.cpu_count() or 4,
     )
     n = len(pages)
-    tool_line("deskew", f"{n} pages loaded")
+    if verbose:
+        tool_line("deskew", f"{n} pages loaded")
+    else:
+        note_line(f"deskew: {n} pages rendered")
 
     results: dict[int, _PageResult] = {}
 
@@ -509,22 +524,33 @@ def deskew_pdf_raster(
         for fut in as_completed(futures):
             page_idx, fixed_pil, top_angle, bot_angle, top_lines, bot_lines = fut.result()
             results[page_idx] = (fixed_pil, top_angle, bot_angle, top_lines, bot_lines)
-            tool_line(
-                "deskew",
-                f"  page {page_idx + 1:>3}/{n}"
-                f"  top={top_angle:+.2f}°  bot={bot_angle:+.2f}°",
-            )
-            tool_line("deskew", f"    top lines: {_lines_str(top_lines)}")
-            tool_line("deskew", f"    bot lines: {_lines_str(bot_lines)}")
+            if verbose:
+                tool_line(
+                    "deskew",
+                    f"  page {page_idx + 1:>3}/{n}"
+                    f"  top={top_angle:+.2f}°  bot={bot_angle:+.2f}°",
+                )
+                tool_line("deskew", f"    top lines: {_lines_str(top_lines)}")
+                tool_line("deskew", f"    bot lines: {_lines_str(bot_lines)}")
+
+    if not verbose:
+        tops = [results[i][2] for i in range(n)]
+        bots = [results[i][3] for i in range(n)]
+        note_line(
+            f"deskew: correction angles  top [{min(tops):+.2f}° … {max(tops):+.2f}°]  "
+            f"bot [{min(bots):+.2f}° … {max(bots):+.2f}°]"
+        )
 
     # Bootstrap IGCSE template from page 0 top half (Tesseract, runs once)
-    tool_line("deskew", "Extracting IGCSE template from page 1 …")
+    if verbose:
+        tool_line("deskew", "Extracting IGCSE template from page 1 …")
     page0_gray = np.array(results[0][0].convert("L"))
     p0_mid = page0_gray.shape[0] // 2
-    igcse_template = extract_igcse_template(page0_gray[:p0_mid, :])
+    igcse_template = extract_igcse_template(page0_gray[:p0_mid, :], verbose=verbose)
 
     # Detect IGCSE anchors on all pages (fast template matching, serial)
-    tool_line("deskew", "Detecting IGCSE anchors …")
+    if verbose:
+        tool_line("deskew", "Detecting IGCSE anchors …")
     page_anchors: dict[int, dict[str, AnchorPoint | None]] = {}
     for i in range(n):
         page_gray = np.array(results[i][0].convert("L"))
@@ -532,11 +558,14 @@ def deskew_pdf_raster(
         tl, tr = detect_igcse_anchors(page_gray[:p_mid, :], igcse_template)
         bl, br = detect_igcse_anchors(page_gray[p_mid:, :], igcse_template)
         page_anchors[i] = {"top_left": tl, "top_right": tr, "bot_left": bl, "bot_right": br}
-        tool_line(
-            "deskew",
-            f"  page {i + 1:>3} anchors:"
-            f"  TL={tl}  TR={tr}  BL={bl}  BR={br}",
-        )
+        if verbose:
+            tool_line(
+                "deskew",
+                f"  page {i + 1:>3} anchors:"
+                f"  TL={tl}  TR={tr}  BL={bl}  BR={br}",
+            )
+    if not verbose:
+        note_line(f"deskew: IGCSE anchors on {n} page(s)")
 
     # Build sidecar JSON (ordered by page index)
     def _anc_dict(a: AnchorPoint | None) -> dict | None:

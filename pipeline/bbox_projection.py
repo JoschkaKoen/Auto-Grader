@@ -449,6 +449,7 @@ def overlay_projected_scaffold_on_scan_pdf(
     line_width: float = 0.9,
     scaffold_page: int = 1,
     mid_y_pt: float = _RAW_MID_Y_PT,
+    verbose: bool = True,
 ) -> Path:
     """Draw projected scaffold regions on a **copy** of the deskewed scan PDF.
 
@@ -470,6 +471,7 @@ def overlay_projected_scaffold_on_scan_pdf(
         line_width: Stroke width in PDF points.
         scaffold_page: Only draw ``BBox`` objects whose ``page`` equals this (1-based).
         mid_y_pt: 4-up split line for top vs bottom transform (default 420.9).
+        verbose: Per-page progress lines; set False for a single summary line (pipeline).
 
     Returns:
         Path to the written *output_pdf*.
@@ -488,17 +490,21 @@ def overlay_projected_scaffold_on_scan_pdf(
 
     all_nodes = flatten_questions(questions)
 
+    from pipeline.terminal_ui import tool_line, warn_line
+
     doc = fitz.open(str(deskewed_pdf))
     try:
         n_doc = len(doc)
         n_side = len(sidecar)
         if n_side != n_doc:
-            print(
-                f"[bbox_overlay] WARNING: sidecar has {n_side} pages, "
-                f"PDF has {n_doc} — overlaying min({n_side}, {n_doc}) pages"
+            warn_line(
+                f"[bbox_overlay] sidecar has {n_side} pages, PDF has {n_doc} "
+                f"— overlaying min({n_side}, {n_doc}) pages"
             )
 
-        for page_idx in range(min(n_doc, n_side)):
+        total_rects = 0
+        n_overlay = min(n_doc, n_side)
+        for page_idx in range(n_overlay):
             entry = sidecar[page_idx]
             page = doc[page_idx]
             h_px = int(round(page.rect.height / px_to_pt))
@@ -534,10 +540,13 @@ def overlay_projected_scaffold_on_scan_pdf(
                 page.draw_rect(r, color=color, width=line_width)
 
             n_drawn = len(exercise) + len(eq_blank)
-            print(
-                f"[bbox_overlay] page {page_idx + 1}/{n_doc}  "
-                f"drawn={n_drawn} rects  (exercise={len(exercise)} eq_blank={len(eq_blank)})"
-            )
+            total_rects += n_drawn
+            if verbose:
+                print(
+                    f"[bbox_overlay] page {page_idx + 1}/{n_doc}  "
+                    f"drawn={n_drawn} rects  (exercise={len(exercise)} "
+                    f"eq_blank={len(eq_blank)})"
+                )
 
         doc.save(str(save_path), garbage=4, deflate=True)
     finally:
@@ -546,7 +555,13 @@ def overlay_projected_scaffold_on_scan_pdf(
     if use_tmp:
         save_path.replace(output_pdf)
 
-    print(f"[bbox_overlay] Saved → {output_pdf}")
+    if verbose:
+        print(f"[bbox_overlay] Saved → {output_pdf}")
+    else:
+        tool_line(
+            "bbox_overlay",
+            f"Projected {total_rects} scaffold rects on {n_overlay} page(s) → {output_pdf.name}",
+        )
     return output_pdf
 
 
