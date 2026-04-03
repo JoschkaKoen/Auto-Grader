@@ -156,6 +156,6 @@ def tool_line(tool: str, message: str) -> None:
     tag = f"[{tool}]"
     indent = "  "
     if use_color():
-        print(f"{indent}{paint(tag, MAGENTA, BOLD)} {message}")
+        print(f"{indent}{paint(tag, MAGENTA, BOLD)} {message}", flush=True)
     else:
-        print(f"{indent}{tag} {message}")
+        print(f"{indent}{tag} {message}", flush=True)

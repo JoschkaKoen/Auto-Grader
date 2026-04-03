@@ -519,6 +519,11 @@ def deskew_pdf_raster(
         print()
         tool_line("deskew", f"Rendering {input_pdf.name} at {dpi} DPI …")
         tool_line("deskew", "Angle detection: full-resolution halves (no proxy downsample)")
+    else:
+        tool_line(
+            "deskew",
+            f"Rasterizing {input_pdf.name} at {dpi} DPI (this can take a minute) …",
+        )
     pages = convert_from_path(
         str(input_pdf),
         dpi=dpi,
@@ -526,12 +531,17 @@ def deskew_pdf_raster(
         thread_count=os.cpu_count() or 4,
     )
     n = len(pages)
+    num_workers = min(os.cpu_count() or 4, n)
     if verbose:
         tool_line("deskew", f"{n} pages loaded")
+    else:
+        tool_line(
+            "deskew",
+            f"{n} pages loaded · per-half skew correction ({num_workers} workers) …",
+        )
 
     results: dict[int, _PageResult] = {}
 
-    num_workers = min(os.cpu_count() or 4, n)
     with ThreadPoolExecutor(max_workers=num_workers) as ex:
         futures = {
             ex.submit(_process_page, (i, pages[i])): i
@@ -552,6 +562,11 @@ def deskew_pdf_raster(
     # Bootstrap IGCSE template from page 0 top half (Tesseract, runs once)
     if verbose:
         tool_line("deskew", "Extracting IGCSE template from page 1 …")
+    else:
+        tool_line(
+            "deskew",
+            "IGCSE header template (Tesseract) + anchor matching on all pages …",
+        )
     page0_gray = np.array(results[0][0].convert("L"))
     p0_mid = page0_gray.shape[0] // 2
     igcse_template = extract_igcse_template(page0_gray[:p0_mid, :], verbose=verbose)
@@ -610,6 +625,9 @@ def deskew_pdf_raster(
         )
     else:
         tool_line("deskew", f"Anchors sidecar → {sidecar_path.name}")
+
+    if not verbose:
+        tool_line("deskew", f"Embedding {n} deskewed pages into raster PDF …")
 
     doc = fitz.open()
     for i in range(n):
