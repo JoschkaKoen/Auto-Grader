@@ -1,0 +1,371 @@
+"""Project scaffold bounding boxes from 4-up raw-exam PDF coordinates onto
+deskewed scan page pixel coordinates.
+
+Background
+----------
+The scaffold is built from a single-page 4-up PDF (595.3 x 841.9 pt) whose
+four sub-pages are arranged as::
+
+    [ sub 1 (TL) | sub 2 (TR) ]
+    [ sub 3 (BL) | sub 4 (BR) ]
+
+The deskewed scan is an A3 raster page at 300 DPI (3508 x ~4961 px).  After
+deskewing it is split at the vertical midpoint into a **top half** and a
+**bottom half**, each containing one landscape A4 sheet with two sub-pages
+side by side.
+
+Each sub-page header carries an "IGCSE Physics: sXX YY" label, whose center
+coordinates are:
+- Known exactly in 4-up PDF space (extracted from the raw vector PDF).
+- Detected on the deskewed scan via template matching (stored in the
+  ``_reflines.json`` sidecar produced by :func:`pipeline.scan_deskew.deskew_pdf_raster`).
+
+These two pairs of corresponding points define a **similarity transform**
+(uniform scale + translation) per half-page.  Rotation is already handled by
+the deskew step, so no rotation term is needed.
+
+Transform math (per half)
+-------------------------
+Given raw anchor pair ``(raw_L, raw_R)`` and scan anchor pair
+``(scan_L, scan_R)``::
+
+    scale = (scan_R.x − scan_L.x) / (raw_R.x − raw_L.x)
+    tx    = scan_L.x − scale × raw_L.x
+    ty    = mean(scan_L.y, scan_R.y) − scale × raw_L.y
+
+    scan_x = scale × raw_x + tx
+    scan_y = scale × raw_y + ty
+
+Bbox coordinates that straddle the 4-up midpoint (y = 420.9 pt) use the
+``top_transform`` when ``y0 < mid_y``, else the ``bot_transform``.
+
+Usage example
+-------------
+::
+
+    from pathlib import Path
+    from pipeline.bbox_projection import (
+        extract_raw_igcse_anchors,
+        compute_page_transforms,
+        project_scaffold_bbox,
+    )
+
+    raw_anchors  = extract_raw_igcse_anchors(Path("raw exam 4up.pdf"))
+    scan_page    = reflines_data[0]   # one entry from _reflines.json
+    top_tf, bot_tf = compute_page_transforms(raw_anchors, scan_page["anchors"])
+
+    # Project a Question.bbox (BBox dataclass from pipeline.models)
+    x0, y0, x1, y1 = project_scaffold_bbox(question.bbox, top_tf, bot_tf)
+"""
+
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
+from pathlib import Path
+from typing import NamedTuple
+
+import fitz  # PyMuPDF
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+#: y-coordinate (pt) that divides the 4-up page into top and bottom halves.
+_RAW_MID_Y_PT: float = 420.9
+
+#: Horizontal midpoint (pt) of the 4-up page — divides left from right sub-pages.
+_RAW_MID_X_PT: float = 297.6
+
+
+# ---------------------------------------------------------------------------
+# Data types
+# ---------------------------------------------------------------------------
+
+class _Point(NamedTuple):
+    x: float
+    y: float
+
+
+@dataclass
+class SimilarityTransform:
+    """Uniform-scale + translation transform from 4-up PDF points to scan pixels.
+
+    Attributes:
+        scale: Pixels per PDF point.
+        tx:    X translation (px).
+        ty:    Y translation (px).
+    """
+    scale: float
+    tx: float
+    ty: float
+
+    def project_point(self, x_pt: float, y_pt: float) -> tuple[float, float]:
+        """Map one point from 4-up PDF space to half-page pixel space."""
+        return self.scale * x_pt + self.tx, self.scale * y_pt + self.ty
+
+    def project_bbox(
+        self, x0_pt: float, y0_pt: float, x1_pt: float, y1_pt: float
+    ) -> tuple[float, float, float, float]:
+        """Map a rectangle from 4-up PDF space to half-page pixel space."""
+        x0, y0 = self.project_point(x0_pt, y0_pt)
+        x1, y1 = self.project_point(x1_pt, y1_pt)
+        return x0, y0, x1, y1
+
+    def __str__(self) -> str:
+        return f"scale={self.scale:.4f} px/pt  tx={self.tx:.1f}  ty={self.ty:.1f}"
+
+
+# ---------------------------------------------------------------------------
+# Extract reference anchors from the raw 4-up PDF
+# ---------------------------------------------------------------------------
+
+def extract_raw_igcse_anchors(raw_4up_pdf: Path) -> dict[str, tuple[float, float]]:
+    """Return the four top-of-subpage IGCSE header positions from *raw_4up_pdf*.
+
+    The raw 4-up PDF contains "IGCSE Physics: sXX YY" labels at the top of
+    each sub-page quadrant.  Some sub-pages also have a *second* scattered
+    "IGCSE" line further down — those are ignored by selecting only the
+    **topmost** (smallest y) label in each quadrant.
+
+    Args:
+        raw_4up_pdf: Path to the single-page 4-up PDF
+            (e.g. ``"raw exam 4up.pdf"``).
+
+    Returns:
+        Dict with keys ``top_left``, ``top_right``, ``bot_left``,
+        ``bot_right``; each value is ``(x_pt, y_pt)`` — center of the
+        "IGCSE …" line in PDF point space.
+
+    Raises:
+        ValueError: If fewer than 4 distinct IGCSE anchor positions are found.
+    """
+    raw_4up_pdf = Path(raw_4up_pdf)
+    doc = fitz.open(str(raw_4up_pdf))
+    page = doc[0]
+    pw, ph = page.rect.width, page.rect.height
+    mid_x = pw / 2
+    mid_y = ph / 2
+
+    # Collect all IGCSE line centers, deduplicated to 1-pt grid
+    igcse_centers: list[tuple[float, float, str]] = []  # (cx, cy, text)
+    seen: set[tuple[int, int]] = set()
+    for block in page.get_text("dict")["blocks"]:
+        if block["type"] != 0:
+            continue
+        for line in block["lines"]:
+            text = "".join(s["text"] for s in line["spans"]).strip()
+            if "IGCSE" not in text:
+                continue
+            bb = line["bbox"]
+            cx = (bb[0] + bb[2]) / 2
+            cy = (bb[1] + bb[3]) / 2
+            key = (round(cx), round(cy))
+            if key not in seen:
+                seen.add(key)
+                igcse_centers.append((cx, cy, text))
+
+    doc.close()
+
+    # For each quadrant keep only the topmost (smallest cy) label
+    best: dict[str, tuple[float, float] | None] = {
+        "top_left": None, "top_right": None,
+        "bot_left": None, "bot_right": None,
+    }
+    for cx, cy, _text in igcse_centers:
+        key = (
+            ("top" if cy < mid_y else "bot")
+            + "_"
+            + ("left" if cx < mid_x else "right")
+        )
+        if best[key] is None or cy < best[key][1]:  # type: ignore[index]
+            best[key] = (cx, cy)
+
+    missing = [k for k, v in best.items() if v is None]
+    if missing:
+        raise ValueError(
+            f"[bbox_projection] Could not find IGCSE anchors in {raw_4up_pdf.name} "
+            f"for quadrant(s): {missing}"
+        )
+
+    return best  # type: ignore[return-value]
+
+
+# ---------------------------------------------------------------------------
+# Transform computation
+# ---------------------------------------------------------------------------
+
+def compute_half_transform(
+    raw_left:  tuple[float, float],
+    raw_right: tuple[float, float],
+    scan_left:  tuple[float, float],
+    scan_right: tuple[float, float],
+) -> SimilarityTransform:
+    """Compute a similarity transform from one pair of corresponding anchors.
+
+    Args:
+        raw_left:   ``(x, y)`` of the left IGCSE anchor in 4-up PDF pt.
+        raw_right:  ``(x, y)`` of the right IGCSE anchor in 4-up PDF pt.
+        scan_left:  ``(x, y)`` of the left IGCSE anchor in scan pixels
+                    (half-page coordinates).
+        scan_right: ``(x, y)`` of the right IGCSE anchor in scan pixels
+                    (half-page coordinates).
+
+    Returns:
+        :class:`SimilarityTransform` mapping PDF pt → scan px.
+    """
+    dx_raw  = raw_right[0]  - raw_left[0]
+    dx_scan = scan_right[0] - scan_left[0]
+    scale = dx_scan / dx_raw
+    tx = scan_left[0] - scale * raw_left[0]
+    # Average the two y observations to reduce noise (both should map to same raw y)
+    ty = (scan_left[1] + scan_right[1]) / 2.0 - scale * raw_left[1]
+    return SimilarityTransform(scale=scale, tx=tx, ty=ty)
+
+
+def compute_page_transforms(
+    raw_anchors: dict[str, tuple[float, float]],
+    scan_anchors: dict[str, dict | None],
+) -> tuple[SimilarityTransform, SimilarityTransform]:
+    """Return ``(top_transform, bot_transform)`` for one scanned page.
+
+    Args:
+        raw_anchors:  Output of :func:`extract_raw_igcse_anchors`.
+        scan_anchors: The ``"anchors"`` sub-dict from one entry in the
+                      ``_reflines.json`` sidecar.  Values are dicts with
+                      ``"x"``, ``"y"``, ``"score"`` keys (or ``None``).
+
+    Returns:
+        ``(top_transform, bot_transform)`` as :class:`SimilarityTransform`.
+
+    Raises:
+        ValueError: If any required anchor is missing (``None``) in
+            *scan_anchors*.
+    """
+    for key in ("top_left", "top_right", "bot_left", "bot_right"):
+        if scan_anchors.get(key) is None:
+            raise ValueError(
+                f"[bbox_projection] Scan anchor '{key}' is missing "
+                f"(template match failed for this page)."
+            )
+
+    def _scan(key: str) -> tuple[float, float]:
+        a = scan_anchors[key]
+        return float(a["x"]), float(a["y"])  # type: ignore[index]
+
+    top_tf = compute_half_transform(
+        raw_left=raw_anchors["top_left"],
+        raw_right=raw_anchors["top_right"],
+        scan_left=_scan("top_left"),
+        scan_right=_scan("top_right"),
+    )
+    bot_tf = compute_half_transform(
+        raw_left=raw_anchors["bot_left"],
+        raw_right=raw_anchors["bot_right"],
+        scan_left=_scan("bot_left"),
+        scan_right=_scan("bot_right"),
+    )
+    return top_tf, bot_tf
+
+
+# ---------------------------------------------------------------------------
+# Bbox projection
+# ---------------------------------------------------------------------------
+
+def project_scaffold_bbox(
+    bbox,
+    top_transform: SimilarityTransform,
+    bot_transform: SimilarityTransform,
+    mid_y: float = _RAW_MID_Y_PT,
+) -> tuple[float, float, float, float]:
+    """Project one scaffold bbox from 4-up PDF space to half-page scan pixels.
+
+    The bbox coordinate ``y0`` determines which transform is used:
+    - ``y0 < mid_y``  → ``top_transform``; result is in the **top** half-page.
+    - ``y0 >= mid_y`` → ``bot_transform``; result is in the **bottom** half-page.
+
+    In both cases the returned coordinates are relative to the **top of that
+    half** (y=0 = first row of the top or bottom half-page image).
+
+    Args:
+        bbox:          A :class:`pipeline.models.BBox` (or any object with
+                       ``.x0``, ``.y0``, ``.x1``, ``.y1`` attributes), in
+                       PDF points on the 4-up page.
+        top_transform: Transform for bboxes whose ``y0`` is in the top half.
+        bot_transform: Transform for bboxes whose ``y0`` is in the bottom half.
+        mid_y:         The y-coordinate (pt) that divides top from bottom half
+                       on the 4-up page.  Defaults to 420.9 pt.
+
+    Returns:
+        ``(x0_px, y0_px, x1_px, y1_px)`` in half-page pixel coordinates
+        (floats; caller should round/clip as needed for cropping).
+    """
+    tf = top_transform if bbox.y0 < mid_y else bot_transform
+    return tf.project_bbox(bbox.x0, bbox.y0, bbox.x1, bbox.y1)
+
+
+def project_all_scaffold_bboxes(
+    questions: list,
+    top_transform: SimilarityTransform,
+    bot_transform: SimilarityTransform,
+    mid_y: float = _RAW_MID_Y_PT,
+) -> list[dict]:
+    """Project every scaffold question's bbox and return a flat list of records.
+
+    Walks the full question tree (including nested subquestions) and projects
+    each bbox.  Useful for validation and debugging.
+
+    Args:
+        questions:     Root-level questions list from an :class:`ExamScaffold`.
+        top_transform: See :func:`project_scaffold_bbox`.
+        bot_transform: See :func:`project_scaffold_bbox`.
+        mid_y:         See :func:`project_scaffold_bbox`.
+
+    Returns:
+        List of dicts, one per question node, with keys:
+        ``number``, ``half`` ("top"/"bot"), ``raw_bbox`` (x0,y0,x1,y1),
+        ``scan_bbox`` (x0_px,y0_px,x1_px,y1_px).
+    """
+    results: list[dict] = []
+
+    def _walk(q) -> None:
+        bbox = q.bbox
+        half = "top" if bbox.y0 < mid_y else "bot"
+        scan = project_scaffold_bbox(bbox, top_transform, bot_transform, mid_y)
+        results.append({
+            "number":   q.number,
+            "half":     half,
+            "raw_bbox": (bbox.x0, bbox.y0, bbox.x1, bbox.y1),
+            "scan_bbox": scan,
+        })
+        for sub in q.subquestions:
+            _walk(sub)
+
+    for q in questions:
+        _walk(q)
+    return results
+
+
+# ---------------------------------------------------------------------------
+# CLI / quick validation helper
+# ---------------------------------------------------------------------------
+
+def _print_page_transforms(
+    raw_4up_pdf: Path,
+    reflines_json: Path,
+    page_number: int = 1,
+) -> None:
+    """Print transforms and projected bboxes for *page_number* (1-based)."""
+    raw_anchors = extract_raw_igcse_anchors(raw_4up_pdf)
+    data = json.loads(Path(reflines_json).read_text())
+
+    entry = next((e for e in data if e["page"] == page_number), None)
+    if entry is None:
+        print(f"Page {page_number} not found in {reflines_json.name}")
+        return
+
+    top_tf, bot_tf = compute_page_transforms(raw_anchors, entry["anchors"])
+    print(f"Page {page_number}:")
+    print(f"  top_transform: {top_tf}")
+    print(f"  bot_transform: {bot_tf}")
+    print(f"  scale ratio top/bot: {top_tf.scale / bot_tf.scale:.5f}")
