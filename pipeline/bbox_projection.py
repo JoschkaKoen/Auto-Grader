@@ -67,6 +67,9 @@ from typing import NamedTuple
 
 import fitz  # PyMuPDF
 
+from pipeline.models import BBox, Question, flatten_questions
+from pipeline.scaffold_overlay import _TEAL, _hsv_color
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -344,6 +347,180 @@ def project_all_scaffold_bboxes(
     for q in questions:
         _walk(q)
     return results
+
+
+# ---------------------------------------------------------------------------
+# Draw projected boxes on a deskewed raster scan PDF
+# ---------------------------------------------------------------------------
+
+def _half_page_px_to_page_rect(
+    x0_px: float,
+    y0_px: float,
+    x1_px: float,
+    y1_px: float,
+    half: str,
+    mid_px: int,
+    px_to_pt: float,
+) -> fitz.Rect:
+    """Map half-page pixel bbox to full-page PDF coordinates (points, top-left origin)."""
+    xa, xb = sorted((x0_px, x1_px))
+    ya, yb = sorted((y0_px, y1_px))
+    y_off = 0 if half == "top" else float(mid_px)
+    return fitz.Rect(
+        xa * px_to_pt,
+        (ya + y_off) * px_to_pt,
+        xb * px_to_pt,
+        (yb + y_off) * px_to_pt,
+    )
+
+
+def _projected_items_for_question_node(
+    q: Question,
+    color_index: int,
+    top_tf: SimilarityTransform,
+    bot_tf: SimilarityTransform,
+    *,
+    scaffold_page: int = 1,
+    mid_y_pt: float = _RAW_MID_Y_PT,
+) -> list[tuple[str, tuple[float, float, float, float], tuple[float, float, float], bool]]:
+    """Like ``scaffold_overlay._rects_for_question_node`` but in projected scan space.
+
+    Returns tuples ``(half, (x0,y0,x1,y1)_px, rgb, is_equation_blank)`` in **half-page
+    pixel** coordinates (``half`` is ``\"top\"`` or ``\"bot\"`` for y-offset on the page).
+    """
+    out: list[tuple[str, tuple[float, float, float, float], tuple[float, float, float], bool]] = []
+    color = _hsv_color(color_index)
+
+    def add(bb: BBox | None, *, is_eq: bool = False) -> None:
+        if bb is None:
+            return
+        if bb.page != scaffold_page:
+            return
+        if bb.x1 <= bb.x0 or bb.y1 <= bb.y0:
+            return
+        half = "top" if bb.y0 < mid_y_pt else "bot"
+        quad = project_scaffold_bbox(bb, top_tf, bot_tf, mid_y_pt)
+        c = _TEAL if is_eq else color
+        out.append((half, quad, c, is_eq))
+
+    add(q.bbox)
+    for im in q.images:
+        add(im.bbox)
+    for eb in q.equation_blank_bboxes:
+        add(eb, is_eq=True)
+    return out
+
+
+def overlay_projected_scaffold_on_scan_pdf(
+    deskewed_pdf: Path,
+    reflines_json: Path,
+    raw_4up_pdf: Path,
+    questions: list[Question],
+    output_pdf: Path,
+    *,
+    dpi: int = 300,
+    line_width: float = 0.9,
+    scaffold_page: int = 1,
+    mid_y_pt: float = _RAW_MID_Y_PT,
+) -> Path:
+    """Draw projected scaffold regions on a **copy** of the deskewed scan PDF.
+
+    For each raster page, reads that page's IGCSE anchors from *reflines_json*,
+    computes top/bottom similarity transforms, projects every question bbox
+    (plus images and equation-blank boxes) from 4-up PDF space onto scan
+    pixels, then strokes rectangles in PDF point space.  Colours follow the same
+    golden-ratio scheme as :func:`pipeline.scaffold_overlay.write_scaffold_boxes_pdf`;
+    equation blanks use teal.
+
+    Args:
+        deskewed_pdf: Output of :func:`pipeline.scan_deskew.deskew_pdf_raster`.
+        reflines_json: Matching ``*_reflines.json`` with ``anchors`` per page.
+        raw_4up_pdf: Raw exam PDF used to build the scaffold (4-up layout).
+        questions: Root-level questions from :class:`pipeline.models.ExamScaffold`.
+        output_pdf: Destination path (must differ from *deskewed_pdf* unless you
+            intend to overwrite after loading into memory first — caller's choice).
+        dpi: Rasterisation DPI of *deskewed_pdf* (default 300).
+        line_width: Stroke width in PDF points.
+        scaffold_page: Only draw ``BBox`` objects whose ``page`` equals this (1-based).
+        mid_y_pt: 4-up split line for top vs bottom transform (default 420.9).
+
+    Returns:
+        Path to the written *output_pdf*.
+    """
+    deskewed_pdf = Path(deskewed_pdf)
+    reflines_json = Path(reflines_json)
+    raw_4up_pdf = Path(raw_4up_pdf)
+    output_pdf = Path(output_pdf)
+
+    use_tmp = output_pdf.resolve() == deskewed_pdf.resolve()
+    save_path = output_pdf.with_suffix(".bbox_overlay_tmp.pdf") if use_tmp else output_pdf
+
+    raw_anchors = extract_raw_igcse_anchors(raw_4up_pdf)
+    sidecar: list[dict] = json.loads(reflines_json.read_text())
+    px_to_pt = 72.0 / dpi
+
+    all_nodes = flatten_questions(questions)
+
+    doc = fitz.open(str(deskewed_pdf))
+    try:
+        n_doc = len(doc)
+        n_side = len(sidecar)
+        if n_side != n_doc:
+            print(
+                f"[bbox_overlay] WARNING: sidecar has {n_side} pages, "
+                f"PDF has {n_doc} — overlaying min({n_side}, {n_doc}) pages"
+            )
+
+        for page_idx in range(min(n_doc, n_side)):
+            entry = sidecar[page_idx]
+            page = doc[page_idx]
+            h_px = int(round(page.rect.height / px_to_pt))
+            mid_px = h_px // 2
+
+            top_tf, bot_tf = compute_page_transforms(raw_anchors, entry["anchors"])
+
+            exercise: list[tuple[fitz.Rect, tuple[float, float, float]]] = []
+            eq_blank: list[tuple[fitz.Rect, tuple[float, float, float]]] = []
+
+            for color_idx, node in enumerate(all_nodes):
+                for half, quad, color, is_eq in _projected_items_for_question_node(
+                    node,
+                    color_idx,
+                    top_tf,
+                    bot_tf,
+                    scaffold_page=scaffold_page,
+                    mid_y_pt=mid_y_pt,
+                ):
+                    x0, y0, x1, y1 = quad
+                    r = _half_page_px_to_page_rect(
+                        x0, y0, x1, y1, half, mid_px, px_to_pt
+                    )
+                    r = r.intersect(page.rect)
+                    if r.is_empty:
+                        continue
+                    if is_eq:
+                        eq_blank.append((r, color))
+                    else:
+                        exercise.append((r, color))
+
+            for r, color in exercise + eq_blank:
+                page.draw_rect(r, color=color, width=line_width)
+
+            n_drawn = len(exercise) + len(eq_blank)
+            print(
+                f"[bbox_overlay] page {page_idx + 1}/{n_doc}  "
+                f"drawn={n_drawn} rects  (exercise={len(exercise)} eq_blank={len(eq_blank)})"
+            )
+
+        doc.save(str(save_path), garbage=4, deflate=True)
+    finally:
+        doc.close()
+
+    if use_tmp:
+        save_path.replace(output_pdf)
+
+    print(f"[bbox_overlay] Saved → {output_pdf}")
+    return output_pdf
 
 
 # ---------------------------------------------------------------------------
