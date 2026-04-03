@@ -163,10 +163,11 @@ All tunables live in `config.py`: AI model, DPI, crop fractions, API retry setti
 
 ## Project layout
 
+[`grade.py`](grade.py) orchestrates the flow (mostly via late imports in `_run`). Packages live at the repo root:
+
 ```
 grade.py             Prompt-driven grading CLI
 config.py            Models, DPI, paths, and all tunables
-PIPELINE_README.md   Package map for the steps below (formerly pipeline/README.md)
 extraction/          Profiles, AI providers, reporting (library)
 preprocessing/       start_scan, remove_blanks_autorotate, deskew, draw_scaffold_bounding_boxes
 scaffold/            generate_scaffold, draw_boxes_on_empty_exam, project_boxes_on_scanned_exam, pdf_parser/
@@ -174,6 +175,43 @@ marking/             parse_instruction, find_exam_folder, assign_pages_to_studen
 reports/             print_results, generate_report
 shared/              models, exam_paths, terminal_ui, load_student_list, load_ground_truth
 ```
+
+### Package roles
+
+| Folder | Role |
+|--------|------|
+| [`extraction/`](extraction/) | AI vision extraction: profiles, providers (Gemini/Kimi), reporting helpers. |
+| [`preprocessing/`](preprocessing/) | Raw class scan → `cleaned_scan.pdf` (blank removal, autorotate, deskew, optional debug PDFs). |
+| [`scaffold/`](scaffold/) | Vector exam + answer key → `ExamScaffold`, cache, figure PNGs, boxes on empty exam, geometry onto scans. |
+| [`marking/`](marking/) | Kimi-driven steps: parse instruction, find folder, assign pages, detect attempted questions, grade. |
+| [`reports/`](reports/) | Terminal tables / summaries and LaTeX → PDF report. |
+| [`shared/`](shared/) | Dataclasses, path helpers, CLI formatting, roster and ground-truth I/O. |
+
+### Terminal output
+
+[`shared/terminal_ui.py`](shared/terminal_ui.py) formats `grade.py` progress. By default, step headers are **compact** (single line). Set **`PIPELINE_VERBOSE=1`** or **`GRADE_VERBOSE=1`** for wide step banners (`═` rules) and extra detail from some modules (e.g. Kimi connection line, extraction debug).
+
+### Import reference (steps 1–11)
+
+Same order as [Pipeline steps](#grade-py--grade-an-exam-from-a-prompt); paths are Python packages (run from repo root).
+
+| Step | Module | Notes |
+|------|--------|-------|
+| 1 | `marking.parse_instruction` | `parse_prompt(...)` |
+| 2 | `marking.find_exam_folder` | `find_folder(...)` |
+| 3 | `shared.load_student_list` | `read_student_list(...)` |
+| 4 | `scaffold.generate_scaffold` | `build_scaffold(...)` |
+| 5 | `preprocessing.start_scan` | `cleanup_pdf(...)` |
+| 6 | `marking.assign_pages_to_students` | `assign_pages(...)` |
+| 7 | `marking.detect_answered_questions` | `detect_answered_exercises(...)` |
+| 8 | `marking.grade_answers` | `grade_students(...)` |
+| 9 | `reports.print_results` | `print_*` helpers |
+| 10 | `shared.load_ground_truth` | optional evaluation |
+| 11 | `reports.generate_report` | `generate_report(...)` |
+
+### Vector PDF parsing
+
+[`scaffold/pdf_parser/`](scaffold/pdf_parser/) implements layout detection, regions, content extraction, and assembly into `Question` trees. Import the stable surface from `scaffold.pdf_parser`.
 
 ---
 
