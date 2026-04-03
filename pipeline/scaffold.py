@@ -2,13 +2,16 @@
 
 No AI for structure: question regions follow left-margin numbering (Cambridge-style).
 The list of questions is in **reading order** on the page(s); printed numbers may be out of order.
-Results are cached as ``{folder}/scaffolds/scaffold_cache.json`` and reused if no PDF
-is newer than the cache. Exam PDF figures are written under ``scaffold_images/exam``.
+Results are cached under ``{artifact_dir}/scaffolds/scaffold_cache.json`` (default
+``output/<exam_stem>/`` via :func:`pipeline.exam_paths.exam_artifact_dir`) and reused
+if no source PDF is newer than the cache. Exam PDF figures go under
+``{artifact_dir}/scaffold_images/exam``.
 """
 
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +25,7 @@ from pipeline.models import (
     flatten_questions,
     gradable_questions,
 )
+from pipeline.exam_paths import artifact_scaffold_cache_path, exam_artifact_dir
 from pipeline.pdf_parser import (
     merge_answers_into_scaffold,
     parse_answer_key_pdf,
@@ -182,26 +186,23 @@ def question_from_dict(d: dict) -> Question:
 # Cache
 # ---------------------------------------------------------------------------
 
-def _scaffolds_dir(folder: Path) -> Path:
-    return folder / "scaffolds"
-
-
-def _cache_path(folder: Path) -> Path:
-    return _scaffolds_dir(folder) / "scaffold_cache.json"
-
-
 def _legacy_cache_path(folder: Path) -> Path:
     """Pre-layout: cache lived at the exam folder root."""
     return folder / "scaffold_cache.json"
 
 
-def _effective_cache_path(folder: Path) -> Path | None:
-    new = _cache_path(folder)
-    if new.exists():
-        return new
-    leg = _legacy_cache_path(folder)
-    if leg.exists():
-        return leg
+def _legacy_scaffold_subdir_cache(folder: Path) -> Path:
+    return folder / "scaffolds" / "scaffold_cache.json"
+
+
+def _effective_cache_path(folder: Path, artifact_dir: Path) -> Path | None:
+    for p in (
+        artifact_scaffold_cache_path(artifact_dir),
+        _legacy_scaffold_subdir_cache(folder),
+        _legacy_cache_path(folder),
+    ):
+        if p.is_file():
+            return p
     return None
 
 
@@ -222,8 +223,8 @@ def _source_pdfs(folder: Path) -> list[Path]:
     return sources
 
 
-def _is_cache_valid(folder: Path) -> bool:
-    cache = _effective_cache_path(folder)
+def _is_cache_valid(folder: Path, artifact_dir: Path) -> bool:
+    cache = _effective_cache_path(folder, artifact_dir)
     if cache is None:
         return False
     sources = _source_pdfs(folder)
@@ -236,10 +237,53 @@ def _is_cache_valid(folder: Path) -> bool:
     return True
 
 
-def _load_cache(folder: Path) -> ExamScaffold:
-    path = _effective_cache_path(folder)
+def _cache_path_under_exam_folder(path: Path, exam_folder: Path) -> bool:
+    try:
+        path.resolve().relative_to(exam_folder.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def _migrate_scaffold_cache_to_artifact(
+    exam_folder: Path, artifact_dir: Path, scaffold: ExamScaffold
+) -> None:
+    """Copy scaffold JSON + images into *artifact_dir* and remove legacy copies in *exam_folder*."""
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    (artifact_dir / "scaffolds").mkdir(parents=True, exist_ok=True)
+    _save_cache(artifact_dir, scaffold)
+    src_img = exam_folder / "scaffold_images"
+    dst_img = artifact_dir / "scaffold_images"
+    if src_img.is_dir():
+        if dst_img.exists():
+            shutil.rmtree(dst_img)
+        shutil.copytree(src_img, dst_img)
+    _clear_legacy_scaffold_outputs(exam_folder)
+
+
+def _clear_legacy_scaffold_outputs(exam_folder: Path) -> None:
+    for p in (_legacy_scaffold_subdir_cache(exam_folder), _legacy_cache_path(exam_folder)):
+        if p.is_file():
+            try:
+                p.unlink()
+            except OSError:
+                pass
+    leg_img = exam_folder / "scaffold_images"
+    if leg_img.is_dir():
+        shutil.rmtree(leg_img, ignore_errors=True)
+    leg_sd = exam_folder / "scaffolds"
+    if leg_sd.is_dir():
+        try:
+            if not any(leg_sd.iterdir()):
+                leg_sd.rmdir()
+        except OSError:
+            pass
+
+
+def _load_cache(folder: Path, artifact_dir: Path) -> ExamScaffold:
+    path = _effective_cache_path(folder, artifact_dir)
     if path is None:
-        raise FileNotFoundError(f"No scaffold cache in {folder}")
+        raise FileNotFoundError(f"No scaffold cache for {folder}")
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
     if data.get("schema_version") != SCHEMA_VERSION:
@@ -251,19 +295,15 @@ def _load_cache(folder: Path) -> ExamScaffold:
     total = int(data.get("total_marks", 0))
     if not total and questions:
         total = sum(q.marks for q in gradable_questions(questions))
-    scaffold = ExamScaffold(
+    return ExamScaffold(
         questions=questions,
         total_marks=total,
         page_count=int(data.get("page_count", 0)),
         raw_description=data.get("raw_description", ""),
     )
-    # One-time move: root `scaffold_cache.json` → `scaffolds/scaffold_cache.json`
-    if path.resolve() == _legacy_cache_path(folder).resolve():
-        _save_cache(folder, scaffold)
-    return scaffold
 
 
-def _save_cache(folder: Path, scaffold: ExamScaffold) -> None:
+def _save_cache(artifact_dir: Path, scaffold: ExamScaffold) -> None:
     payload = {
         "schema_version": SCHEMA_VERSION,
         "questions": [question_to_dict(q) for q in scaffold.questions],
@@ -271,39 +311,53 @@ def _save_cache(folder: Path, scaffold: ExamScaffold) -> None:
         "page_count": scaffold.page_count,
         "raw_description": scaffold.raw_description,
     }
-    out = _cache_path(folder)
-    _scaffolds_dir(folder).mkdir(parents=True, exist_ok=True)
+    out = artifact_scaffold_cache_path(artifact_dir)
+    out.parent.mkdir(parents=True, exist_ok=True)
     with open(out, "w", encoding="utf-8") as f:
         json.dump(payload, f, indent=2, ensure_ascii=False)
-    leg = _legacy_cache_path(folder)
-    if leg.exists() and leg.resolve() != out.resolve():
-        try:
-            leg.unlink()
-        except OSError:
-            pass
 
 
-def build_scaffold(folder: Path, client: Any | None = None, dpi: int = 200) -> ExamScaffold:
+def build_scaffold(
+    folder: Path,
+    client: Any | None = None,
+    dpi: int = 200,
+    *,
+    artifact_dir: Path | None = None,
+    output_base: str | Path = "output",
+) -> ExamScaffold:
     """Build (or load from cache) the ExamScaffold for the exam in *folder*.
 
-    *client* is optional and unused (kept for backward compatibility with callers).
+    Derived files (cache, ``scaffold_images``, overlay PDF) go under *artifact_dir*
+    (default: ``output/<exam_stem>/``). *client* is optional and unused.
     *dpi* is unused; parsing is vector-based.
     """
     _ = client, dpi
     from pipeline.terminal_ui import tool_line
 
-    if _is_cache_valid(folder):
+    ad = artifact_dir or exam_artifact_dir(folder, output_base)
+
+    if _is_cache_valid(folder, ad):
         try:
             tool_line("scaffold", "Loading scaffold from cache …")
-            return _load_cache(folder)
+            loaded_path = _effective_cache_path(folder, ad)
+            scaffold = _load_cache(folder, ad)
+            if loaded_path is not None and _cache_path_under_exam_folder(
+                loaded_path, folder
+            ):
+                tool_line(
+                    "scaffold",
+                    "Migrating scaffold cache and images from exam folder → output …",
+                )
+                _migrate_scaffold_cache_to_artifact(folder, ad, scaffold)
+            return scaffold
         except (ValueError, KeyError, TypeError, json.JSONDecodeError):
             tool_line("scaffold", "Cache incompatible or corrupt — rebuilding …")
 
     exam_pdf = _find_exam_pdf(folder)
-    prepare_scaffold_image_dirs(folder)
+    prepare_scaffold_image_dirs(ad)
 
     tool_line("scaffold", f"Parsing exam PDF (vector): {exam_pdf.name} …")
-    questions = parse_exam_pdf(exam_pdf, folder)
+    questions = parse_exam_pdf(exam_pdf, folder, artifact_dir=ad)
     if not questions:
         raise RuntimeError(
             "No questions detected in exam PDF. Check that the file is a vector paper "
@@ -349,8 +403,12 @@ def build_scaffold(folder: Path, client: Any | None = None, dpi: int = 200) -> E
         page_count=page_count,
         raw_description=raw_description,
     )
-    _save_cache(folder, scaffold)
-    out_pdf, n_rects, n_pages = write_scaffold_boxes_pdf(exam_pdf, questions)
+    _save_cache(ad, scaffold)
+    _clear_legacy_scaffold_outputs(folder)
+    boxes_out = ad / f"{exam_pdf.stem}_scaffold_boxes.pdf"
+    out_pdf, n_rects, n_pages = write_scaffold_boxes_pdf(
+        exam_pdf, questions, output_path=boxes_out
+    )
     tool_line(
         "scaffold",
         f"Scaffold built: {len(questions)} top-level questions, "

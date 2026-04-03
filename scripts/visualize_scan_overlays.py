@@ -25,6 +25,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
+from pipeline.exam_paths import exam_artifact_dir
 from pipeline.scan_overlays import (
     write_projected_scaffold_debug_pdf,
     write_reflines_debug_pdf,
@@ -45,7 +46,7 @@ def main() -> None:
         "--scan",
         type=Path,
         default=None,
-        help="Deskewed raster PDF (default: <folder>/cleaned_scan.pdf)",
+        help="Deskewed raster PDF (default: output/<stem>/cleaned_scan.pdf, else exam folder)",
     )
     ap.add_argument(
         "--dpi",
@@ -76,7 +77,12 @@ def main() -> None:
     args = ap.parse_args()
 
     folder = args.folder.resolve()
-    scan = args.scan.resolve() if args.scan else folder / "cleaned_scan.pdf"
+    if args.scan:
+        scan = args.scan.resolve()
+    else:
+        art = exam_artifact_dir(folder) / "cleaned_scan.pdf"
+        leg = folder / "cleaned_scan.pdf"
+        scan = art if art.is_file() else leg
     if not scan.is_file():
         print(f"Missing scan PDF: {scan}", file=sys.stderr)
         sys.exit(1)

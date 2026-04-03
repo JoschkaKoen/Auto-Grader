@@ -164,7 +164,7 @@ def _vector_figure_core_with_nearby_labels(
 def extract_images(
     page: fitz.Page,
     clip: fitz.Rect,
-    exam_folder: Path,
+    artifact_dir: Path,
     subdir: str,
     stem: str,
     page_1based: int,
@@ -172,7 +172,7 @@ def extract_images(
     cfg: ParserConfig | None = None,
 ) -> list[ExamImage]:
     cfg = cfg or DEFAULT_PARSER_CONFIG
-    out_dir = exam_folder / "scaffold_images" / subdir
+    out_dir = artifact_dir / "scaffold_images" / subdir
     out_dir.mkdir(parents=True, exist_ok=True)
     found: list[ExamImage] = []
     for item in page.get_images(full=True):

@@ -15,7 +15,7 @@ The program will:
   2. Locate the exam folder.
   3. Read the student roster from StudentList.xlsx.
   4. Build an exam scaffold by parsing vector exam + answer-key PDFs (PyMuPDF).
-  5. Clean the scan PDF (auto-rotate + blank removal).
+  5. Clean the scan PDF (auto-rotate + blank removal + deskew); writes under output/<exam_stem>/.
   6. Identify which pages belong to which student.
   7. Detect which exercises each student attempted.
   8. Grade and print a full results table.
@@ -93,7 +93,7 @@ def parse_args() -> argparse.Namespace:
         "--no-cleanup",
         action="store_true",
         default=False,
-        help="Skip PDF cleaning step (use existing cleaned_scan.pdf if present)",
+        help="Skip PDF cleaning (use output/<stem>/cleaned_scan.pdf, or legacy exam-folder scan)",
     )
     parser.add_argument(
         "--reclean",
@@ -119,7 +119,7 @@ def parse_args() -> argparse.Namespace:
         "--output-dir",
         default="output",
         metavar="DIR",
-        help="Directory for the PDF report and LaTeX source (default: output/)",
+        help="Base directory: per-exam artifacts under DIR/<exam_stem>/; reports under .../runs/<timestamp>/",
     )
     parser.add_argument(
         "--no-report",
@@ -223,9 +223,12 @@ def _run(args: argparse.Namespace, timestamp: str) -> None:
     note_line(f"{folder}")
 
     stem = folder.name.replace(" ", "_")
-    run_dir = Path(args.output_dir) / f"{timestamp}_{stem}"
+    artifact_dir = Path(args.output_dir) / stem
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+    run_dir = artifact_dir / "runs" / timestamp
     run_dir.mkdir(parents=True, exist_ok=True)
-    note_line(f"Run output directory: {run_dir}")
+    note_line(f"Exam artifacts: {artifact_dir}")
+    note_line(f"Run report directory: {run_dir}")
     if args.through_step == 2:
         info_line("--through-step 2: stopping after find exam folder (README table).")
         raise SystemExit(0)
@@ -246,12 +249,16 @@ def _run(args: argparse.Namespace, timestamp: str) -> None:
     # ------------------------------------------------------------------ #
     pipeline_step(4, "Build exam scaffold")
     if args.rescaffold:
-        cache_p = folder / "scaffolds" / "scaffold_cache.json"
-        if cache_p.is_file():
-            cache_p.unlink()
-            warn_line(f"--rescaffold: removed {cache_p}")
+        for cache_p in (
+            artifact_dir / "scaffolds" / "scaffold_cache.json",
+            folder / "scaffolds" / "scaffold_cache.json",
+            folder / "scaffold_cache.json",
+        ):
+            if cache_p.is_file():
+                cache_p.unlink()
+                warn_line(f"--rescaffold: removed {cache_p}")
 
-    scaffold = build_scaffold(folder, client=client)
+    scaffold = build_scaffold(folder, client=client, artifact_dir=artifact_dir)
     print_scaffold_summary(scaffold)
     if args.through_step == 4:
         info_line("--through-step 4: stopping after build scaffold (README table).")
@@ -262,11 +269,14 @@ def _run(args: argparse.Namespace, timestamp: str) -> None:
     # ------------------------------------------------------------------ #
     pipeline_step(5, "Clean scan PDF")
     if args.no_cleanup:
-        # Use pre-existing cleaned_scan.pdf or raw scan
-        existing = folder / "cleaned_scan.pdf"
-        if existing.exists():
-            cleaned_pdf = existing
-            info_line(f"--no-cleanup: using {cleaned_pdf.name}")
+        cleaned_here = artifact_dir / "cleaned_scan.pdf"
+        legacy_cleaned = folder / "cleaned_scan.pdf"
+        if cleaned_here.exists():
+            cleaned_pdf = cleaned_here
+            info_line(f"--no-cleanup: using {cleaned_pdf}")
+        elif legacy_cleaned.exists():
+            cleaned_pdf = legacy_cleaned
+            info_line(f"--no-cleanup: using legacy {cleaned_pdf}")
         else:
             scans = list(folder.glob("*.pdf"))
             scans = [f for f in scans if "scan" in f.name.lower()]
@@ -276,7 +286,12 @@ def _run(args: argparse.Namespace, timestamp: str) -> None:
             cleaned_pdf = scans[0]
             info_line(f"--no-cleanup: using {cleaned_pdf.name}")
     else:
-        cleaned_pdf = cleanup_pdf(folder, dpi=instruction.dpi, reclean=args.reclean)
+        cleaned_pdf = cleanup_pdf(
+            folder,
+            dpi=instruction.dpi,
+            reclean=args.reclean,
+            artifact_dir=artifact_dir,
+        )
     if args.through_step == 5:
         info_line("--through-step 5: stopping after clean scan (README table).")
         raise SystemExit(0)

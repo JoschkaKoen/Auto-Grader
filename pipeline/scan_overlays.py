@@ -41,6 +41,7 @@ def write_projected_scaffold_debug_pdf(
 ) -> Path | None:
     """Project scaffold bboxes onto *deskewed_pdf* using 4-up anchors + reflines JSON."""
     from pipeline.bbox_projection import find_raw_four_up_pdf, overlay_projected_scaffold_on_scan_pdf
+    from pipeline.exam_paths import exam_artifact_dir
     from pipeline.scaffold import _find_exam_pdf, build_scaffold
 
     folder = Path(folder)
@@ -70,7 +71,7 @@ def write_projected_scaffold_debug_pdf(
         return None
 
     try:
-        scaffold = build_scaffold(folder)
+        scaffold = build_scaffold(folder, artifact_dir=exam_artifact_dir(folder))
         roots = scaffold.questions
     except Exception as e:
         print(f"[scan_overlays] Could not load scaffold: {e}")

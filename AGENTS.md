@@ -56,7 +56,7 @@ Auto-Grader/
 ├── .env                       # API keys and secrets (NOT committed)
 ├── .gitignore                 # Excludes .env, outputs, debug files
 ├── Ground Truth               # Tab-separated reference answers (local only)
-├── output/                    # Processed PDFs + `{stem}_answers.{json,tex,pdf}`
+├── output/                    # Per-exam pipeline artifacts (`<exam_stem>/`), reports (`.../runs/<ts>/`), extract_answers outputs
 ├── Space Physics Unit Test/         # Source scanned PDFs (gitignored)
 ├── debug/                     # Debug crops (e.g. debug/debug_crops_*)
 └── *_first*_eval.json         # Eval outputs (auto-generated)
@@ -182,7 +182,9 @@ Processing pipeline:
 
 ### Output Naming
 
-Full-run outputs use the input PDF stem under `output/`:
+`grade.py` writes pipeline artifacts for each exam under `output/<exam_stem>/` (scaffold cache, `scaffold_images/`, `cleaned_scan.pdf`, deskew sidecar and debug overlays). PDF/LaTeX reports for each run go under `output/<exam_stem>/runs/<timestamp>/`.
+
+Full-run extraction outputs use the input PDF stem under `output/`:
 - Input example: `Space Physics Unit Test/scan 400dpi.pdf` (or a cleaned PDF under `output/`)
 - JSON / TeX / PDF: `output/{stem}_answers.{json,tex,pdf}` (e.g. `scan 400dpi_answers.json`)
 - Debug crops: `debug/debug_crops_{stem}/`

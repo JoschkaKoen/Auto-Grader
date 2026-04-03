@@ -107,16 +107,23 @@ def parse_mark_scheme_table_answers(doc: fitz.Document) -> dict[str, str]:
 
 
 def parse_exam_pdf(
-    pdf_path: Path, exam_folder: Path, cfg: ParserConfig = DEFAULT_PARSER_CONFIG
+    pdf_path: Path,
+    exam_folder: Path,
+    cfg: ParserConfig = DEFAULT_PARSER_CONFIG,
+    *,
+    artifact_dir: Path | None = None,
 ) -> list[Question]:
-    """Parse blank exam vector PDF; write images under exam_folder/scaffold_images/exam/."""
+    """Parse blank exam vector PDF; write images under artifact_dir/scaffold_images/exam/."""
+    from pipeline.exam_paths import exam_artifact_dir
+
+    root = artifact_dir or exam_artifact_dir(exam_folder)
     doc = fitz.open(pdf_path)
     try:
         positions = find_question_positions(doc, cfg)
         if not positions:
             return []
         segments = iter_region_segments(doc, positions, cfg)
-        return build_questions_from_segments(doc, segments, exam_folder, cfg)
+        return build_questions_from_segments(doc, segments, root, cfg)
     finally:
         doc.close()
 
@@ -231,12 +238,12 @@ def merge_answers_into_scaffold(
             q.correct_answer = letter
 
 
-def prepare_scaffold_image_dirs(exam_folder: Path) -> Path:
-    """Create ``scaffold_images/exam``; remove any prior ``scaffold_images`` tree.
+def prepare_scaffold_image_dirs(artifact_dir: Path) -> Path:
+    """Create ``scaffold_images/exam`` under *artifact_dir*; remove prior tree there.
 
     Answer-key PDFs are not rasterized here (they are text-only mark schemes).
     """
-    base = exam_folder / "scaffold_images"
+    base = artifact_dir / "scaffold_images"
     exam_d = base / "exam"
     if base.exists():
         shutil.rmtree(base)

@@ -33,7 +33,7 @@ from pipeline.pdf_parser.subparts import maybe_split_written_subquestions
 def build_questions_from_segments(
     doc: fitz.Document,
     segments: list[tuple[str, int, float, float, fitz.Rect, int, float, bool, bool]],
-    exam_folder: Path,
+    artifact_dir: Path,
     cfg: ParserConfig,
 ) -> list[Question]:
     by_q: dict[str, list[tuple[int, float, float, fitz.Rect, int, float, bool, bool]]] = defaultdict(
@@ -75,7 +75,7 @@ def build_questions_from_segments(
 
             stem = f"q{stem_base}_p{page_1}"
             for im in extract_images(
-                page, clip, exam_folder, "exam", stem, page_1, img_counter, cfg
+                page, clip, artifact_dir, "exam", stem, page_1, img_counter, cfg
             ):
                 all_images.append(
                     ExamImage(
