@@ -101,7 +101,8 @@ python grade.py "check the first 5 students' answers" --dpi 300
 |--------|-------------|
 | `--folder PATH` | Path to the exam folder |
 | `--dpi N` | Override image DPI |
-| `--no-cleanup` | Skip cleaning; use `output/<exam_stem>/cleaned_scan.pdf`, a legacy cleaned scan in the exam folder, or a `*scan*.pdf` there |
+| `--no-cleanup` | Skip class-scan preprocessing (no blanks/rotation/deskew); reuse `output/<exam_stem>/cleaned_scan.pdf`, a legacy cleaned scan in the exam folder, or fall back to a `*scan*.pdf` there |
+| `--reclean` | Drop the cached cleaned scan and rebuild it from the class scan (full preprocess + deskew) |
 | `--no-report` | Print results to terminal only; skip LaTeX/PDF |
 
 Per-exam artifacts and run reports are always under `output/<exam_stem>/` and `output/<exam_stem>/runs/<timestamp>/` (not configurable).

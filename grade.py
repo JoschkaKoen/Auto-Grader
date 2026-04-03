@@ -93,13 +93,20 @@ def parse_args() -> argparse.Namespace:
         "--no-cleanup",
         action="store_true",
         default=False,
-        help="Skip PDF cleaning (use output/<stem>/cleaned_scan.pdf, or legacy exam-folder scan)",
+        help=(
+            "Skip class-scan preprocessing (no blank removal, rotation, or deskew). "
+            "Uses output/<exam_stem>/cleaned_scan.pdf if it exists, else a cleaned scan "
+            "still in the exam folder, else the first *scan*.pdf there."
+        ),
     )
     parser.add_argument(
         "--reclean",
         action="store_true",
         default=False,
-        help="Force PDF cleaning + deskew (ignore cleaned_scan.pdf cache; see README step 5)",
+        help=(
+            "Ignore any cached cleaned scan: delete cleaned_scan.pdf (and reflines sidecar), "
+            "then run full preprocessing again from the class scan PDF."
+        ),
     )
     parser.add_argument(
         "--rescaffold",
