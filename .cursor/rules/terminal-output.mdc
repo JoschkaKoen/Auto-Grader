@@ -1,0 +1,15 @@
+---
+description: Terminal/CLI output must be human-readable and beautiful by default
+alwaysApply: true
+---
+
+# Terminal Output
+
+All CLI/script output must be human-readable by default — never dump raw JSON, dicts, or unformatted data unless the user passes `--json`/`--raw`.
+
+- Use headers, spacing, and separators for structure
+- Use tables for list/tabular data
+- Use color sparingly for success/error/warnings
+- Show progress indicators for long-running operations
+
+**Python**: use `rich` (`Console`, `Table`, `Panel`, `Progress`). Always import and use it for all output.
