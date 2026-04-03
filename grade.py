@@ -116,12 +116,6 @@ def parse_args() -> argparse.Namespace:
         help="Exit after README pipeline step N (1–11). E.g. 6 = after assign pages, before exercise detection.",
     )
     parser.add_argument(
-        "--output-dir",
-        default="output",
-        metavar="DIR",
-        help="Base directory: per-exam artifacts under DIR/<exam_stem>/; reports under .../runs/<timestamp>/",
-    )
-    parser.add_argument(
         "--no-report",
         action="store_true",
         default=False,
@@ -223,7 +217,7 @@ def _run(args: argparse.Namespace, timestamp: str) -> None:
     note_line(f"{folder}")
 
     stem = folder.name.replace(" ", "_")
-    artifact_dir = Path(args.output_dir) / stem
+    artifact_dir = Path("output") / stem
     artifact_dir.mkdir(parents=True, exist_ok=True)
     run_dir = artifact_dir / "runs" / timestamp
     run_dir.mkdir(parents=True, exist_ok=True)
