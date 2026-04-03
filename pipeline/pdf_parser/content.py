@@ -165,14 +165,13 @@ def extract_images(
     page: fitz.Page,
     clip: fitz.Rect,
     artifact_dir: Path,
-    subdir: str,
     stem: str,
     page_1based: int,
     img_counter: list[int],
     cfg: ParserConfig | None = None,
 ) -> list[ExamImage]:
     cfg = cfg or DEFAULT_PARSER_CONFIG
-    out_dir = artifact_dir / "scaffold_images" / subdir
+    out_dir = artifact_dir / "scaffold_images"
     out_dir.mkdir(parents=True, exist_ok=True)
     found: list[ExamImage] = []
     for item in page.get_images(full=True):
@@ -197,7 +196,7 @@ def extract_images(
             except Exception:
                 img_counter[0] -= 1
                 continue
-            rel = f"scaffold_images/{subdir}/{name}"
+            rel = f"scaffold_images/{name}"
             found.append(
                 ExamImage(
                     bbox=BBox(crop.x0, crop.y0, crop.x1, crop.y1, page_1based),
@@ -221,7 +220,7 @@ def extract_images(
                 except Exception:
                     img_counter[0] -= 1
                 else:
-                    rel = f"scaffold_images/{subdir}/{name}"
+                    rel = f"scaffold_images/{name}"
                     found.append(
                         ExamImage(
                             bbox=BBox(crop.x0, crop.y0, crop.x1, crop.y1, page_1based),

@@ -74,9 +74,7 @@ def build_questions_from_segments(
                 text_parts.append(chunk)
 
             stem = f"q{stem_base}_p{page_1}"
-            for im in extract_images(
-                page, clip, artifact_dir, "exam", stem, page_1, img_counter, cfg
-            ):
+            for im in extract_images(page, clip, artifact_dir, stem, page_1, img_counter, cfg):
                 all_images.append(
                     ExamImage(
                         bbox=expand_bbox_to_subpage_width(doc, im.bbox),

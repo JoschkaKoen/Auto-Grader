@@ -5,7 +5,7 @@ The list of questions is in **reading order** on the page(s); printed numbers ma
 Results are cached under ``{artifact_dir}/scaffolds/scaffold_cache.json`` (default
 ``output/<exam_stem>/`` via :func:`pipeline.exam_paths.exam_artifact_dir`) and reused
 if no source PDF is newer than the cache. Exam PDF figures go under
-``{artifact_dir}/scaffold_images/exam``.
+``{artifact_dir}/scaffold_images``.
 """
 
 from __future__ import annotations

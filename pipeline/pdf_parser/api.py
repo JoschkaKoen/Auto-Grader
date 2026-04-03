@@ -113,7 +113,7 @@ def parse_exam_pdf(
     *,
     artifact_dir: Path | None = None,
 ) -> list[Question]:
-    """Parse blank exam vector PDF; write images under artifact_dir/scaffold_images/exam/."""
+    """Parse blank exam vector PDF; write images under artifact_dir/scaffold_images/."""
     from pipeline.exam_paths import exam_artifact_dir
 
     root = artifact_dir or exam_artifact_dir(exam_folder)
@@ -239,13 +239,12 @@ def merge_answers_into_scaffold(
 
 
 def prepare_scaffold_image_dirs(artifact_dir: Path) -> Path:
-    """Create ``scaffold_images/exam`` under *artifact_dir*; remove prior tree there.
+    """Create empty ``scaffold_images`` under *artifact_dir*; remove prior tree there.
 
     Answer-key PDFs are not rasterized here (they are text-only mark schemes).
     """
     base = artifact_dir / "scaffold_images"
-    exam_d = base / "exam"
     if base.exists():
         shutil.rmtree(base)
-    exam_d.mkdir(parents=True)
-    return exam_d
+    base.mkdir(parents=True)
+    return base
