@@ -8,7 +8,9 @@ After deskewing, the three vertical reference lines printed on each Cambridge
 exam sheet (left edge, centre column, right edge) are located by morphological
 opening with a 1×150 vertical kernel, which erases text/handwriting while
 preserving the tall printed ruling lines.  Detected positions are stored in a
-sidecar ``<output_stem>_reflines.json`` written next to the output PDF.
+sidecar ``<stem>_reflines.json`` (next to the output PDF by default, or set via
+``reflines_sidecar``).  *input_pdf* and *output_pdf* must differ — the source
+file is never overwritten in-place.
 
 Empirical data from 34 pages of a Space Physics scan (300 DPI, 68 half-pages):
   Range -0.45 to +0.20 deg, median -0.30 deg, 91 % of halves |skew| > 0.1 deg.
@@ -447,20 +449,40 @@ def deskew_pdf_raster(
     input_pdf: Path,
     output_pdf: Path,
     dpi: int = 300,
+    *,
+    reflines_sidecar: Path | None = None,
 ) -> Path:
     """Rasterize *input_pdf*, deskew each page (per half), detect reference
-    lines, write *output_pdf* and a sidecar ``<stem>_reflines.json``.
+    lines, write *output_pdf* and a sidecar JSON file.
+
+    **Input and output paths must differ** — raw or intermediate PDFs must never
+    be overwritten in-place (the pipeline reads the whole file while building
+    the new document).  Callers that want to replace an existing file should write
+    to a sibling temp path and ``Path.replace`` afterward.
 
     Args:
         input_pdf: Source PDF (already OSD-rotated by autograder).
-        output_pdf: Destination PDF (may equal input_pdf to overwrite in-place).
+        output_pdf: Destination PDF (must not resolve to the same path as *input_pdf*).
         dpi: Render/output DPI.
+        reflines_sidecar: Optional path for the ``*_reflines.json`` sidecar.
+            Defaults to ``output_pdf.with_name(output_pdf.stem + "_reflines.json")``.
+            Use this when *output_pdf* is a temp file but the sidecar should use
+            the final output stem (e.g. ``cleaned_scan_reflines.json``).
 
     Returns:
         Path to the written output PDF.
     """
     input_pdf = Path(input_pdf)
     output_pdf = Path(output_pdf)
+
+    in_r = input_pdf.resolve()
+    out_r = output_pdf.resolve()
+    if in_r == out_r:
+        raise ValueError(
+            "[deskew] input_pdf and output_pdf must be different paths — "
+            "refusing to overwrite the source PDF. Write to a temp file, "
+            "then Path.replace() if you need to update the original path."
+        )
 
     print(f"\n[deskew] Rendering {input_pdf.name} at {dpi} DPI …")
     print("[deskew] Angle detection: full-resolution halves (no proxy downsample)")
@@ -531,13 +553,13 @@ def deskew_pdf_raster(
             },
         })
 
-    sidecar_path = output_pdf.with_name(output_pdf.stem + "_reflines.json")
+    sidecar_path = (
+        Path(reflines_sidecar).resolve()
+        if reflines_sidecar is not None
+        else output_pdf.with_name(output_pdf.stem + "_reflines.json").resolve()
+    )
     sidecar_path.write_text(json.dumps(reflines_data, indent=2))
     print(f"[deskew] Reference lines → {sidecar_path.name}")
-
-    # If output == input we need a temp file to avoid overwriting while reading
-    use_tmp = output_pdf.resolve() == input_pdf.resolve()
-    write_target = output_pdf.with_suffix(".deskew_tmp.pdf") if use_tmp else output_pdf
 
     doc = fitz.open()
     for i in range(n):
@@ -552,11 +574,8 @@ def deskew_pdf_raster(
         rect = fitz.Rect(0, 0, w_px * pt_per_px, h_px * pt_per_px)
         page.insert_image(rect, stream=png_bytes)
 
-    doc.save(str(write_target), deflate=True)
+    doc.save(str(output_pdf), deflate=True)
     doc.close()
-
-    if use_tmp:
-        write_target.replace(output_pdf)
 
     print(f"[deskew] Saved → {output_pdf}")
     return output_pdf

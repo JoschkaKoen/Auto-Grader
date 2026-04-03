@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 
@@ -51,6 +52,14 @@ def cleanup_pdf(folder: Path, dpi: int = 300, deskew: bool = True) -> Path:
 
     if deskew:
         from pipeline.scan_deskew import deskew_pdf_raster  # type: ignore[import]
-        deskew_pdf_raster(output, output, dpi=dpi)
+
+        tmp_deskew = output.parent / f"{output.stem}_deskew_tmp{output.suffix}"
+        deskew_pdf_raster(
+            input_pdf=output,
+            output_pdf=tmp_deskew,
+            dpi=dpi,
+            reflines_sidecar=output.with_name(f"{output.stem}_reflines.json"),
+        )
+        shutil.move(str(tmp_deskew), str(output))
 
     return output

@@ -66,6 +66,8 @@ These A3-portrait scans contain two A4 exam sheets per page (top half and bottom
 
 > **Note:** Fine deskew rasterises the output at the chosen `--dpi`. The result is a bitmap-only PDF (pages are not selectable as vector text), which is acceptable for downstream OCR / AI grading.
 
+The toolchain **never overwrites the original scan PDF**: `autograder.py` refuses identical input/output paths, and deskew always writes to a separate file (then replaces the cleaned output when updating `cleaned_scan.pdf`).
+
 `pipeline/pdf_cleanup.py` runs fine deskew automatically (pass 3) when called from `grade.py`. Pass `deskew=False` to disable.
 
 ---

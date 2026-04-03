@@ -144,7 +144,7 @@ Main functions:
 - `get_deskew_angle(gray)` → float: Otsu binarise at native resolution, sweep -3°…+3° in 0.01° steps, return best angle by max vertical-projection variance.
 - `deskew_image(gray, angle)` → np.ndarray: Apply angle at full resolution with `INTER_CUBIC`; skip if `|angle| < 0.05°`.
 - `deskew_page_halves(page_gray)` → (array, top_angle, bot_angle): Split at midpoint, detect and correct each half independently, reassemble.
-- `deskew_pdf_raster(input_pdf, output_pdf, dpi)` → Path: Render all pages, deskew per page, assemble via PyMuPDF. Prints per-page angles to console.
+- `deskew_pdf_raster(input_pdf, output_pdf, dpi, reflines_sidecar=None)` → Path: Render all pages, deskew per page, assemble via PyMuPDF. *input_pdf* and *output_pdf* must resolve to different paths (never overwrite the source). Optional `reflines_sidecar` fixes the JSON path when writing the PDF to a temp file first. Prints per-page angles to console.
 
 ### extract_answers.py + `extraction/`
 

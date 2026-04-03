@@ -22,6 +22,7 @@ Usage:
 
 import argparse
 import os
+import shutil
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -105,6 +106,13 @@ def process_pdf(input_path: str,
 
     input_path = Path(input_path)
     output_path = Path(output_path)
+
+    if input_path.resolve() == output_path.resolve():
+        print(
+            "ERROR: Input and output paths are the same — refusing to overwrite "
+            "the source PDF. Choose a different output path."
+        )
+        sys.exit(1)
 
     if not input_path.exists():
         print(f"ERROR: Input file not found: {input_path}")
@@ -243,11 +251,16 @@ def main():
 
     if args.deskew:
         from pipeline.scan_deskew import deskew_pdf_raster  # type: ignore[import]
+
+        out_p = Path(args.output)
+        tmp_deskew = out_p.parent / f"{out_p.stem}_deskew_tmp{out_p.suffix}"
         deskew_pdf_raster(
-            input_pdf=Path(args.output),
-            output_pdf=Path(args.output),
+            input_pdf=out_p,
+            output_pdf=tmp_deskew,
             dpi=args.dpi,
+            reflines_sidecar=out_p.with_name(f"{out_p.stem}_reflines.json"),
         )
+        shutil.move(str(tmp_deskew), str(out_p))
 
 
 if __name__ == "__main__":
