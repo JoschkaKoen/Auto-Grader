@@ -95,6 +95,26 @@ def parse_args() -> argparse.Namespace:
         help="Skip PDF cleaning step (use existing cleaned_scan.pdf if present)",
     )
     parser.add_argument(
+        "--reclean",
+        action="store_true",
+        default=False,
+        help="Force PDF cleaning + deskew (ignore cleaned_scan.pdf cache; see README step 5)",
+    )
+    parser.add_argument(
+        "--rescaffold",
+        action="store_true",
+        default=False,
+        help="Delete scaffolds/scaffold_cache.json before building (force re-parse, step 4)",
+    )
+    parser.add_argument(
+        "--through-step",
+        type=int,
+        default=None,
+        metavar="N",
+        choices=list(range(1, 12)),
+        help="Exit after README pipeline step N (1–11). E.g. 6 = after assign pages, before exercise detection.",
+    )
+    parser.add_argument(
         "--output-dir",
         default="output",
         metavar="DIR",
@@ -106,7 +126,10 @@ def parse_args() -> argparse.Namespace:
         default=False,
         help="Skip PDF report generation (terminal output only)",
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    if args.no_cleanup and args.reclean:
+        parser.error("--no-cleanup and --reclean cannot be used together.")
+    return args
 
 
 def main() -> None:
@@ -171,6 +194,9 @@ def _run(args: argparse.Namespace, timestamp: str) -> None:
         f"Students: {instruction.student_filter.mode}  |  "
         f"DPI: {instruction.dpi}"
     )
+    if args.through_step == 1:
+        print("\n[grade] --through-step 1: stopping after parse prompt (README table).")
+        raise SystemExit(0)
 
     # ------------------------------------------------------------------ #
     # Step 3: Find exam folder                                            #
@@ -185,6 +211,9 @@ def _run(args: argparse.Namespace, timestamp: str) -> None:
     run_dir = Path(args.output_dir) / f"{timestamp}_{stem}"
     run_dir.mkdir(parents=True, exist_ok=True)
     print(f"[grade] Run output:  {run_dir}")
+    if args.through_step == 2:
+        print("\n[grade] --through-step 2: stopping after find exam folder (README table).")
+        raise SystemExit(0)
 
     # ------------------------------------------------------------------ #
     # Step 4: Read student list                                           #
@@ -192,12 +221,24 @@ def _run(args: argparse.Namespace, timestamp: str) -> None:
     students = read_student_list(folder)
     print(f"[grade] Roster: {len(students)} students — {', '.join(students[:5])}" +
           (" …" if len(students) > 5 else ""))
+    if args.through_step == 3:
+        print("\n[grade] --through-step 3: stopping after load roster (README table).")
+        raise SystemExit(0)
 
     # ------------------------------------------------------------------ #
     # Step 5: Build exam scaffold                                         #
     # ------------------------------------------------------------------ #
+    if args.rescaffold:
+        cache_p = folder / "scaffolds" / "scaffold_cache.json"
+        if cache_p.is_file():
+            cache_p.unlink()
+            print(f"[grade] --rescaffold: removed {cache_p}")
+
     scaffold = build_scaffold(folder, client=client)
     print_scaffold_summary(scaffold)
+    if args.through_step == 4:
+        print("\n[grade] --through-step 4: stopping after build scaffold (README table).")
+        raise SystemExit(0)
 
     # ------------------------------------------------------------------ #
     # Step 6: Clean scan PDF                                              #
@@ -217,7 +258,10 @@ def _run(args: argparse.Namespace, timestamp: str) -> None:
             cleaned_pdf = scans[0]
             print(f"[grade] --no-cleanup: using {cleaned_pdf}")
     else:
-        cleaned_pdf = cleanup_pdf(folder, dpi=instruction.dpi)
+        cleaned_pdf = cleanup_pdf(folder, dpi=instruction.dpi, reclean=args.reclean)
+    if args.through_step == 5:
+        print("\n[grade] --through-step 5: stopping after clean scan (README table).")
+        raise SystemExit(0)
 
     # ------------------------------------------------------------------ #
     # Step 7: Page assignment                                             #
@@ -232,6 +276,13 @@ def _run(args: argparse.Namespace, timestamp: str) -> None:
         name_crop_fraction=NAME_CROP_FRACTION,
     )
     print_page_summary(page_map, students)
+    if args.through_step == 6:
+        proj = cleaned_pdf.with_name(f"{cleaned_pdf.stem}_projected_boxes.pdf")
+        print(
+            f"\n[grade] --through-step 6: stopping after assign pages (README table).\n"
+            f"        Scan with projected scaffold bboxes (if generated): {proj}"
+        )
+        raise SystemExit(0)
 
     if not page_map:
         print("WARNING: No student pages identified. Cannot grade.", file=sys.stderr)
@@ -245,6 +296,9 @@ def _run(args: argparse.Namespace, timestamp: str) -> None:
         dpi=NAME_RECOGNITION_DPI, client=client,
     )
     print_exercise_summary(exercise_map)
+    if args.through_step == 7:
+        print("\n[grade] --through-step 7: stopping after exercise detection (README table).")
+        raise SystemExit(0)
 
     # ------------------------------------------------------------------ #
     # Step 9: Grade                                                       #
@@ -254,6 +308,11 @@ def _run(args: argparse.Namespace, timestamp: str) -> None:
     )
     print_results_table(results, scaffold)
     print_grand_summary(results)
+    if args.through_step in (8, 9):
+        print(
+            f"\n[grade] --through-step {args.through_step}: stopping after grade / results (README table)."
+        )
+        raise SystemExit(0)
 
     # ------------------------------------------------------------------ #
     # Step 10: Ground truth evaluation (if file exists in exam folder)   #
@@ -272,6 +331,10 @@ def _run(args: argparse.Namespace, timestamp: str) -> None:
         print("[grade] No ground truth file found — skipping evaluation.")
         print("        (To enable, add a ground_truth.txt file to the exam folder.)")
 
+    if args.through_step == 10:
+        print("\n[grade] --through-step 10: stopping after ground-truth step (README table).")
+        raise SystemExit(0)
+
     # ------------------------------------------------------------------ #
     # Step 11: PDF report                                                 #
     # ------------------------------------------------------------------ #
@@ -287,6 +350,9 @@ def _run(args: argparse.Namespace, timestamp: str) -> None:
             eval_data=eval_data,
             title=title,
         )
+    if args.through_step == 11:
+        print("\n[grade] --through-step 11: full pipeline complete (README table).")
+        raise SystemExit(0)
 
 
 if __name__ == "__main__":

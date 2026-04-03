@@ -6,7 +6,6 @@ generate ``*_reflines_overlay.pdf`` by default (see :func:`write_reflines_debug_
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 
@@ -42,7 +41,7 @@ def write_projected_scaffold_debug_pdf(
 ) -> Path | None:
     """Project scaffold bboxes onto *deskewed_pdf* using 4-up anchors + reflines JSON."""
     from pipeline.bbox_projection import find_raw_four_up_pdf, overlay_projected_scaffold_on_scan_pdf
-    from pipeline.scaffold import _effective_cache_path, _find_exam_pdf, question_from_dict
+    from pipeline.scaffold import _find_exam_pdf, build_scaffold
 
     folder = Path(folder)
     deskewed_pdf = Path(deskewed_pdf)
@@ -53,11 +52,6 @@ def write_projected_scaffold_debug_pdf(
             "[scan_overlays] No *4up* raw exam PDF — skip projected scaffold overlay "
             "(needs four-up IGCSE header anchors)."
         )
-        return None
-
-    cache = _effective_cache_path(folder)
-    if cache is None:
-        print("[scan_overlays] No scaffold cache — skip projected overlay")
         return None
 
     try:
@@ -76,11 +70,10 @@ def write_projected_scaffold_debug_pdf(
         return None
 
     try:
-        with open(cache, encoding="utf-8") as f:
-            data = json.load(f)
-        roots = [question_from_dict(q) for q in data["questions"]]
+        scaffold = build_scaffold(folder)
+        roots = scaffold.questions
     except Exception as e:
-        print(f"[scan_overlays] Could not load scaffold cache: {e}")
+        print(f"[scan_overlays] Could not load scaffold: {e}")
         return None
 
     sidecar = deskewed_pdf.with_name(deskewed_pdf.stem + "_reflines.json")

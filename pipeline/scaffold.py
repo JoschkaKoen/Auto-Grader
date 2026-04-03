@@ -205,12 +205,32 @@ def _effective_cache_path(folder: Path) -> Path | None:
     return None
 
 
+def _source_pdfs(folder: Path) -> list[Path]:
+    """Return only the PDFs that the scaffold is built from (exam + answer key).
+
+    Derived outputs (cleaned_scan.pdf, overlay PDFs, etc.) are intentionally excluded
+    so they don't invalidate the cache when they are updated after a deskew run.
+    """
+    try:
+        exam = _find_exam_pdf(folder)
+        sources = [exam]
+    except FileNotFoundError:
+        sources = []
+    ans = _find_answer_pdf(folder)
+    if ans is not None:
+        sources.append(ans)
+    return sources
+
+
 def _is_cache_valid(folder: Path) -> bool:
     cache = _effective_cache_path(folder)
     if cache is None:
         return False
+    sources = _source_pdfs(folder)
+    if not sources:
+        return False
     cache_mtime = cache.stat().st_mtime
-    for pdf in folder.glob("*.pdf"):
+    for pdf in sources:
         if pdf.stat().st_mtime > cache_mtime:
             return False
     return True
@@ -228,7 +248,6 @@ def _load_cache(folder: Path) -> ExamScaffold:
             f"(got {data.get('schema_version')!r}, need {SCHEMA_VERSION})"
         )
     questions = [question_from_dict(q) for q in data["questions"]]
-    flat = flatten_questions(questions)
     total = int(data.get("total_marks", 0))
     if not total and questions:
         total = sum(q.marks for q in gradable_questions(questions))
