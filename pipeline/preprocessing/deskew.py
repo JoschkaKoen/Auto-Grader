@@ -4,13 +4,12 @@ Each A3 page contains two A4 exam sheets (top half / bottom half). The scanner
 introduces independent sub-degree skew in each half, so angle detection and
 correction are performed **per half** and the halves are reassembled.
 
-After deskewing, the three vertical reference lines printed on each Cambridge
-exam sheet (left edge, centre column, right edge) are located by morphological
-opening with a 1×150 vertical kernel, which erases text/handwriting while
-preserving the tall printed ruling lines.  Detected positions are stored in a
-sidecar ``<stem>_reflines.json`` (next to the output PDF by default, or set via
-``reflines_sidecar``).  *input_pdf* and *output_pdf* must differ — the source
-file is never overwritten in-place.
+The sidecar ``<stem>_reflines.json`` (next to the output PDF by default, or set
+via ``reflines_sidecar``) stores **IGCSE header anchor** positions per page for
+projection onto scans.  Legacy ``top`` / ``bot`` vertical-refline arrays are
+written as empty lists; the detector :func:`detect_reference_lines` is kept in
+the module but not invoked in the pipeline.  *input_pdf* and *output_pdf* must
+differ — the source file is never overwritten in-place.
 
 Empirical data from 34 pages of a Space Physics scan (300 DPI, 68 half-pages):
   Range -0.45 to +0.20 deg, median -0.30 deg, 91 % of halves |skew| > 0.1 deg.
@@ -397,8 +396,10 @@ def detect_igcse_anchors(
 def deskew_page_halves(
     page_gray: np.ndarray,
 ) -> tuple[np.ndarray, float, float, list[ReferenceLine], list[ReferenceLine]]:
-    """Split *page_gray* at the vertical midpoint, deskew each half separately,
-    then detect the three vertical reference lines on each corrected half.
+    """Split *page_gray* at the vertical midpoint, deskew each half separately.
+
+    Vertical ruling-line detection is not run (``top_lines`` / ``bot_lines`` are
+    empty); see :func:`detect_reference_lines` if you need that logic elsewhere.
 
     Returns:
         (deskewed_full_page, top_angle, bot_angle, top_lines, bot_lines)
@@ -415,8 +416,8 @@ def deskew_page_halves(
     top_fixed = deskew_image(top, top_angle)
     bot_fixed = deskew_image(bot, bot_angle)
 
-    top_lines = detect_reference_lines(top_fixed)
-    bot_lines = detect_reference_lines(bot_fixed)
+    top_lines: list[ReferenceLine] = []
+    bot_lines: list[ReferenceLine] = []
 
     return np.vstack([top_fixed, bot_fixed]), top_angle, bot_angle, top_lines, bot_lines
 
@@ -625,8 +626,9 @@ def overlay_reflines_on_pdf(
     line_rgb: tuple[float, float, float] = _OVERLAY_PINK,
     line_width_pt: float = _OVERLAY_LINE_WIDTH_PT,
 ) -> Path:
-    """Draw detected vertical reference lines (from *reflines_json*) in pink on a
-    **copy** of *deskewed_pdf*, saved to *output_pdf*.
+    """Draw vertical reference lines from ``top`` / ``bot`` (pink, if present)
+    and IGCSE anchor crosshairs on a **copy** of *deskewed_pdf*, saved to
+    *output_pdf*.  When those arrays are empty, only anchors are drawn.
 
     Coordinates in the JSON are pixel offsets on each A4 **half** (top: y from
     page top; bottom: y from the half-page boundary). This matches
