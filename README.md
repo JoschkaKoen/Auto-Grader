@@ -212,4 +212,4 @@ AGENTS.md            Deep reference for maintainers and AI agents
 
 ## Security
 
-Do not commit `.env`, scans, ground-truth files, or any file containing student data. These paths are gitignored by design.
+Do not commit `.env`, the `output/` directory, scans, ground-truth files, or any file containing student data. The `output/` tree is gitignored so it is never pushed to GitHub; do not force-add it.

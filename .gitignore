@@ -11,7 +11,7 @@ __pycache__/
 # PDFs (exam scans, reports) — never commit; may contain student data
 *.pdf
 
-# Source scan folder and processed output trees
+# Source scan folder and processed output trees (never commit or push — local only)
 Space Physics Unit Test/
 output/
 

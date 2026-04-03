@@ -56,7 +56,7 @@ Auto-Grader/
 ├── .env                       # API keys and secrets (NOT committed)
 ├── .gitignore                 # Excludes .env, outputs, debug files
 ├── Ground Truth               # Tab-separated reference answers (local only)
-├── output/                    # Per-exam pipeline artifacts (`<exam_stem>/`), reports (`.../runs/<ts>/`), extract_answers outputs
+├── output/                    # Local only — gitignored; never commit or push to GitHub
 ├── Space Physics Unit Test/         # Source scanned PDFs (gitignored)
 ├── debug/                     # Debug crops (e.g. debug/debug_crops_*)
 └── *_first*_eval.json         # Eval outputs (auto-generated)
@@ -116,10 +116,8 @@ python scripts/extract_answers.py --first-students 12
 python scripts/extract_answers.py --skip
 ```
 
-**Output files** (under `output/` for full runs; eval JSON in project root):
-- `output/{stem}_answers.json` — Structured extraction results
-- `output/{stem}_answers.tex` — LaTeX source for report
-- `output/{stem}_answers.pdf` — Compiled PDF report
+**Output files** (all under gitignored `output/` — never push; eval JSON in project root):
+- `output/extract_answers/<safe_stem>/{stem}_answers.{json,tex,pdf}` — Full extraction runs
 - `debug/debug_crops_{stem}/` — Cropped page images (if enabled)
 
 ## Code Organization
@@ -276,7 +274,7 @@ git commit -m "Your message"
 - `.env` or `.env.*`
 - Any `*.pdf` (gitignored repo-wide; scans and generated reports)
 - `Space Physics Unit Test/`
-- `output/` directory
+- `output/` directory (entire tree — do not `git add -f output/`; nothing under it belongs on GitHub)
 - `debug_crops*/` directories
 - `*_answers.{json,tex,pdf}`
 - `Ground Truth*` files
