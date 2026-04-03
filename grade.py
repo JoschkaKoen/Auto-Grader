@@ -232,7 +232,7 @@ def _run(args: argparse.Namespace, timestamp: str) -> None:
         note_line("Effective flags: " + ", ".join(_flag_bits))
 
     if through_step == 1:
-        info_line("through_step 1: stopping after parse prompt (README table).")
+        info_line("Stopping after step 1 (--through-step).")
         raise SystemExit(0)
 
     # ------------------------------------------------------------------ #
@@ -260,7 +260,7 @@ def _run(args: argparse.Namespace, timestamp: str) -> None:
     note_line(f"Exam output root: {exam_output_root}")
     note_line(f"This run (all artifacts): {artifact_dir}")
     if through_step == 2:
-        info_line("through_step 2: stopping after find exam folder (README table).")
+        info_line("Stopping after step 2 (--through-step).")
         raise SystemExit(0)
 
     # ------------------------------------------------------------------ #
@@ -271,7 +271,7 @@ def _run(args: argparse.Namespace, timestamp: str) -> None:
     roster_preview = ", ".join(students[:5]) + (" …" if len(students) > 5 else "")
     note_line(f"{len(students)} students — {roster_preview}")
     if through_step == 3:
-        info_line("through_step 3: stopping after load roster (README table).")
+        info_line("Stopping after step 3 (--through-step).")
         raise SystemExit(0)
 
     # ------------------------------------------------------------------ #
@@ -292,7 +292,7 @@ def _run(args: argparse.Namespace, timestamp: str) -> None:
     scaffold = build_scaffold(folder, client=client, artifact_dir=artifact_dir)
     print_scaffold_summary(scaffold)
     if through_step == 4:
-        info_line("through_step 4: stopping after build scaffold (README table).")
+        info_line("Stopping after step 4 (--through-step).")
         raise SystemExit(0)
 
     # ------------------------------------------------------------------ #
@@ -324,7 +324,7 @@ def _run(args: argparse.Namespace, timestamp: str) -> None:
             artifact_dir=artifact_dir,
         )
     if through_step == 5:
-        info_line("through_step 5: stopping after clean scan (README table).")
+        info_line("Stopping after step 5 (--through-step).")
         raise SystemExit(0)
 
     # ------------------------------------------------------------------ #
@@ -344,8 +344,8 @@ def _run(args: argparse.Namespace, timestamp: str) -> None:
     print_page_summary(page_map, students)
     if through_step == 6:
         proj = cleaned_pdf.with_name(f"{cleaned_pdf.stem}_projected_boxes.pdf")
-        info_line("through_step 6: stopping after assign pages (README table).")
-        note_line(f"Projected scaffold overlay (if generated): {proj}")
+        info_line("Stopping after step 6 (--through-step).")
+        note_line(f"Projected overlay (if any): {proj.name}")
         raise SystemExit(0)
 
     if not page_map:
@@ -362,7 +362,7 @@ def _run(args: argparse.Namespace, timestamp: str) -> None:
     )
     print_exercise_summary(exercise_map)
     if through_step == 7:
-        info_line("through_step 7: stopping after exercise detection (README table).")
+        info_line("Stopping after step 7 (--through-step).")
         raise SystemExit(0)
 
     # ------------------------------------------------------------------ #
@@ -376,9 +376,7 @@ def _run(args: argparse.Namespace, timestamp: str) -> None:
     print_results_table(results, scaffold)
     print_grand_summary(results)
     if through_step in (8, 9):
-        info_line(
-            f"through_step {through_step}: stopping after grade / results (README table)."
-        )
+        info_line(f"Stopping after step {through_step} (--through-step).")
         raise SystemExit(0)
 
     # ------------------------------------------------------------------ #
@@ -396,11 +394,10 @@ def _run(args: argparse.Namespace, timestamp: str) -> None:
         else:
             warn_line("Ground truth file could not be parsed — skipping evaluation.")
     else:
-        info_line("No ground truth file in folder — skipping evaluation.")
-        info_line("(Add ground_truth.txt to the exam folder to enable.)")
+        info_line("No ground_truth file — skipped (add ground_truth.txt to enable).")
 
     if through_step == 10:
-        info_line("through_step 10: stopping after ground-truth step (README table).")
+        info_line("Stopping after step 10 (--through-step).")
         raise SystemExit(0)
 
     # ------------------------------------------------------------------ #
@@ -423,7 +420,7 @@ def _run(args: argparse.Namespace, timestamp: str) -> None:
     else:
         info_line("no_report: skipping LaTeX/PDF.")
     if through_step == 11:
-        ok_line("through_step 11: full pipeline complete (README table).")
+        ok_line("Full pipeline complete (--through-step 11).")
         raise SystemExit(0)
 
     ok_line("Grading pipeline finished.")

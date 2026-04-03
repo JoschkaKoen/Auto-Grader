@@ -72,7 +72,7 @@ def _call_kimi(client: Any, image_b64: str) -> str:
             )
             return resp.choices[0].message.content or ""
         except Exception as exc:
-            warn_line(f"[assign_pages_to_students] API error (attempt {attempt}/3): {exc}")
+            warn_line(f"API error (attempt {attempt}/3): {exc}")
             if attempt < 3:
                 time.sleep(2 ** attempt)
     return ""
@@ -103,7 +103,7 @@ def assign_pages(
 
     from pipeline.shared.terminal_ui import info_line, note_line, tool_line
 
-    tool_line("assign_pages_to_students", f"Rendering {cleaned_pdf.name} at {dpi} DPI …")
+    tool_line("pages", f"Rendering {cleaned_pdf.name} @ {dpi} DPI …")
     pages = convert_from_path(str(cleaned_pdf), dpi=dpi, thread_count=os.cpu_count() or 4)
     n_pages = len(pages)
     step = max(1, n_pages // 8) if not verbose and n_pages > 1 else 1
@@ -123,10 +123,7 @@ def assign_pages(
         raw_names.append(name)
         time.sleep(0.2)  # light rate-limit
     if not verbose and n_pages > 1:
-        note_line(
-            f"Name OCR: {n_pages} pages "
-            f"(sampled every {step} pages plus first/last; use verbose for all lines)"
-        )
+        info_line(f"Name OCR: {n_pages} pages (sample every {step}; verbose=all lines)")
 
     # Fuzzy-match each raw name; empty → "UNKNOWN"
     matched: list[str | None] = []

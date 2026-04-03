@@ -12,6 +12,7 @@ import time
 from typing import Any
 
 from pipeline.shared.models import StudentFilter, TaskInstruction
+from pipeline.shared.terminal_ui import info_line, warn_line
 
 
 _SYSTEM_PROMPT = """\
@@ -105,7 +106,7 @@ def _call_kimi_text(client: Any, user_message: str) -> str:
             response = client.chat.completions.create(**kwargs)
             return response.choices[0].message.content or ""
         except Exception as exc:
-            print(f"  [parse_instruction] API error (attempt {attempt}/3): {exc}")
+            warn_line(f"Parse prompt API error (attempt {attempt}/3): {exc}")
             if attempt < 3:
                 time.sleep(2 ** attempt)
     return ""
@@ -133,12 +134,12 @@ def parse_prompt(
     instruction = _heuristic_fallback(prompt, dpi_override)
 
     if client is None:
-        print("[parse_instruction] Warning: no Kimi client — using heuristic parse only.")
+        warn_line("No Kimi client — using heuristic parse only.")
         return instruction
 
     raw = _call_kimi_text(client, prompt)
     if not raw.strip():
-        print("[parse_instruction] Empty AI response — using heuristic parse.")
+        warn_line("Empty AI response — using heuristic parse.")
         return instruction
 
     try:
@@ -150,10 +151,10 @@ def parse_prompt(
             try:
                 data = json.loads(raw[start : end + 1])
             except json.JSONDecodeError:
-                print("[parse_instruction] Could not parse AI response — using heuristic parse.")
+                warn_line("Could not parse AI response — using heuristic parse.")
                 return instruction
         else:
-            print("[parse_instruction] Could not parse AI response — using heuristic parse.")
+            warn_line("Could not parse AI response — using heuristic parse.")
             return instruction
 
     sf_raw = data.get("student_filter") or {}
@@ -200,7 +201,7 @@ def parse_prompt(
             pass
 
     if skip_clean_scan and force_clean_scan:
-        print("[parse_instruction] Both skip_clean_scan and force_clean_scan in AI JSON — forcing both false.")
+        info_line("AI JSON had both skip_clean_scan and force_clean_scan — cleared both.")
         skip_clean_scan = False
         force_clean_scan = False
 

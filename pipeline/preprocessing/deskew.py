@@ -490,17 +490,12 @@ def deskew_pdf_raster(
             "then Path.replace() if you need to update the original path."
         )
 
-    from pipeline.shared.terminal_ui import note_line, ok_line, tool_line
+    from pipeline.shared.terminal_ui import info_line, note_line, ok_line, tool_line
 
     if verbose:
         print()
         tool_line("deskew", f"Rendering {input_pdf.name} at {dpi} DPI …")
         tool_line("deskew", "Angle detection: full-resolution halves (no proxy downsample)")
-    else:
-        tool_line(
-            "deskew",
-            f"Fine deskew {input_pdf.name} @ {dpi} DPI (per-page detail suppressed) …",
-        )
     pages = convert_from_path(
         str(input_pdf),
         dpi=dpi,
@@ -510,8 +505,6 @@ def deskew_pdf_raster(
     n = len(pages)
     if verbose:
         tool_line("deskew", f"{n} pages loaded")
-    else:
-        note_line(f"deskew: {n} pages rendered")
 
     results: dict[int, _PageResult] = {}
 
@@ -532,15 +525,6 @@ def deskew_pdf_raster(
                 )
                 tool_line("deskew", f"    top lines: {_lines_str(top_lines)}")
                 tool_line("deskew", f"    bot lines: {_lines_str(bot_lines)}")
-
-    if not verbose:
-        # _PageResult: (image, top_angle, bot_angle, top_lines, bot_lines)
-        tops = [results[i][1] for i in range(n)]
-        bots = [results[i][2] for i in range(n)]
-        note_line(
-            f"deskew: correction angles  top [{min(tops):+.2f}° … {max(tops):+.2f}°]  "
-            f"bot [{min(bots):+.2f}° … {max(bots):+.2f}°]"
-        )
 
     # Bootstrap IGCSE template from page 0 top half (Tesseract, runs once)
     if verbose:
@@ -565,9 +549,6 @@ def deskew_pdf_raster(
                 f"  page {i + 1:>3} anchors:"
                 f"  TL={tl}  TR={tr}  BL={bl}  BR={br}",
             )
-    if not verbose:
-        note_line(f"deskew: IGCSE anchors on {n} page(s)")
-
     # Build sidecar JSON (ordered by page index)
     def _anc_dict(a: AnchorPoint | None) -> dict | None:
         return asdict(a) if a is not None else None
@@ -594,7 +575,18 @@ def deskew_pdf_raster(
         else output_pdf.with_name(output_pdf.stem + "_reflines.json").resolve()
     )
     sidecar_path.write_text(json.dumps(reflines_data, indent=2))
-    tool_line("deskew", f"Reference lines → {sidecar_path.name}")
+
+    if not verbose:
+        tops = [results[i][1] for i in range(n)]
+        bots = [results[i][2] for i in range(n)]
+        info_line(
+            f"{input_pdf.name}: {n}p @ {dpi} DPI · "
+            f"angles top [{min(tops):+.2f}°…{max(tops):+.2f}°] "
+            f"bot [{min(bots):+.2f}°…{max(bots):+.2f}°] · "
+            f"IGCSE anchors · → {sidecar_path.name}"
+        )
+    else:
+        tool_line("deskew", f"Reference lines → {sidecar_path.name}")
 
     doc = fitz.open()
     for i in range(n):

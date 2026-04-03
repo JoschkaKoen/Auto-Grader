@@ -1,8 +1,9 @@
 """TTY-aware ANSI colors and optional emoji for CLI output.
 
 Respects `NO_COLOR` (https://no-color.org/) and `FORCE_COLOR`. Set `ASCII_LOG=1` to
-disable emoji (ASCII fallbacks). Colors follow the real terminal attached behind any
-``_stdout`` wrapper (e.g. ``grade.py``'s log tee).
+disable emoji (ASCII fallbacks). Set ``PIPELINE_VERBOSE=1`` or ``GRADE_VERBOSE=1`` for
+wide step banners and extra detail from some modules. Colors follow the real terminal
+attached behind any ``_stdout`` wrapper (e.g. ``grade.py``'s log tee).
 """
 
 from __future__ import annotations
@@ -106,13 +107,27 @@ def rule(char: str = "═", width: int = 60) -> str:
     return paint(line, DIM) if use_color() else line
 
 
+def pipeline_verbose() -> bool:
+    """True when ``PIPELINE_VERBOSE`` or ``GRADE_VERBOSE`` requests heavy banners / debug."""
+    v = (os.environ.get("PIPELINE_VERBOSE") or os.environ.get("GRADE_VERBOSE") or "").strip()
+    return v.lower() in ("1", "true", "yes", "on")
+
+
 def pipeline_step(readme_step: int, title: str, *, width: int = 60) -> None:
-    """Print a README-aligned pipeline step banner."""
+    """Print a pipeline step header (compact by default; wide rules if :func:`pipeline_verbose`)."""
     print()
-    print(rule("═", width))
-    label = f"  {icon('step')}  Step {readme_step}  {title}"
-    print(paint(label, CYAN, BOLD))
-    print(rule("═", width))
+    label = f"  {icon('step')}  Step {readme_step} — {title}"
+    if pipeline_verbose():
+        print(rule("═", width))
+        print(paint(label, CYAN, BOLD))
+        print(rule("═", width))
+    else:
+        print(paint(label, CYAN, BOLD))
+
+
+def progress_line(message: str) -> None:
+    """Highlight the current action (brighter than :func:`info_line`)."""
+    print(paint(f"  {icon('info')}  {message}", CYAN))
 
 
 def info_line(message: str, *, key: str = "info") -> None:
@@ -137,9 +152,10 @@ def note_line(message: str) -> None:
 
 
 def tool_line(tool: str, message: str) -> None:
-    """Sub-system tag, e.g. ``[scaffold] …`` (colored when supported)."""
+    """Sub-system tag aligned with other status lines, e.g. ``  [deskew] …``."""
     tag = f"[{tool}]"
+    indent = "  "
     if use_color():
-        print(f"{paint(tag, MAGENTA, BOLD)} {message}")
+        print(f"{indent}{paint(tag, MAGENTA, BOLD)} {message}")
     else:
-        print(f"{tag} {message}")
+        print(f"{indent}{tag} {message}")

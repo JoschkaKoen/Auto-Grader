@@ -12,6 +12,10 @@ The grading pipeline is split into **domain subpackages** under `pipeline/`. [`g
 | [`reports/`](reports/) | Terminal tables / summaries and LaTeX → PDF report. |
 | [`shared/`](shared/) | Dataclasses, path helpers, CLI formatting, roster and ground-truth I/O. |
 
+## Terminal output
+
+[`shared/terminal_ui.py`](shared/terminal_ui.py) formats `grade.py` progress. By default, step headers are **compact** (single line). Set **`PIPELINE_VERBOSE=1`** or **`GRADE_VERBOSE=1`** to restore wide step banners (`═` rules) and extra detail from some modules (e.g. Kimi connection line, extraction debug).
+
 ## `grade.py` step → module map
 
 | Step | Module (import path) | Notes |

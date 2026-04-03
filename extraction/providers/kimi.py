@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import json
 import os
+import sys
 import time
 from typing import Any
 
@@ -26,6 +27,15 @@ except ImportError:
 def _kimi_k2_5_model() -> bool:
     """Return True for kimi-k2.5 family, which has fixed temperature and thinking mode."""
     return AI_MODEL.startswith("kimi-k2")
+
+
+def _pipeline_verbose() -> bool:
+    try:
+        from pipeline.shared.terminal_ui import pipeline_verbose
+
+        return pipeline_verbose()
+    except Exception:
+        return False
 
 
 def _filter_schema_fields(data: dict, schema: type[BaseModel]) -> dict:
@@ -104,11 +114,14 @@ class KimiProvider:
                 print(msg)
 
         def _note(msg: str) -> None:
+            if not _pipeline_verbose():
+                return
             try:
                 from pipeline.shared.terminal_ui import note_line
+
                 note_line(msg)
             except Exception:
-                print(msg)
+                pass
 
         if not KIMI_AVAILABLE:
             _warn("OpenAI package not installed. Run: pip install openai")
@@ -119,7 +132,7 @@ class KimiProvider:
             return None
 
         base_url = os.getenv("KIMI_BASE_URL", "https://api.moonshot.cn/v1")
-        _note(f"Connecting to Kimi API at: {base_url}")
+        _note(f"Kimi API: {base_url}")
         
         assert _OpenAIClient is not None
         return _OpenAIClient(api_key=api_key, base_url=base_url)
@@ -136,7 +149,12 @@ class KimiProvider:
         if not KIMI_AVAILABLE or _OpenAIClient is None:
             return _failed_record("openai package not installed", answer_fields)
         if not isinstance(client, _OpenAIClient):
-            print("    Error: Kimi model selected but wrong client type")
+            try:
+                from pipeline.shared.terminal_ui import err_line
+
+                err_line("Kimi model selected but wrong client type")
+            except Exception:
+                print("Error: Kimi model selected but wrong client type", file=sys.stderr)
             return _failed_record("Client type mismatch for Kimi", answer_fields)
         return self._single(client, image_bytes, page_num, prompt, schema, answer_fields)
 
@@ -198,7 +216,15 @@ class KimiProvider:
                     # Try to extract partial JSON
                     partial_data = _extract_json_from_text(raw)
                     if partial_data is not None:
-                        print(f"    [INFO] Recovered partial JSON response for page {page_num}")
+                        if _pipeline_verbose():
+                            try:
+                                from pipeline.shared.terminal_ui import info_line
+
+                                info_line(
+                                    f"Recovered partial JSON for page {page_num}"
+                                )
+                            except Exception:
+                                pass
                         # Also filter extra fields from partial data
                         partial_data = _filter_schema_fields(partial_data, schema)
                         try:
@@ -206,17 +232,35 @@ class KimiProvider:
                         except ValidationError:
                             pass
                         return normalize_extracted_record(partial_data, answer_fields)
-                    
-                    print(f"    [DEBUG] Kimi response parse error: {parse_err}")
-                    print(f"    [DEBUG] Raw response: {raw[:500]}...")
+
+                    if _pipeline_verbose():
+                        try:
+                            from pipeline.shared.terminal_ui import info_line
+
+                            info_line(f"Kimi parse error: {parse_err}")
+                            info_line(f"Raw (500 chars): {raw[:500]}…")
+                        except Exception:
+                            pass
                     raise RuntimeError(f"Unparseable Kimi response for page {page_num}") from parse_err
 
             except Exception as e:
-                print(f"    Kimi API error (attempt {attempt}/{MAX_RETRIES}): {e}")
+                try:
+                    from pipeline.shared.terminal_ui import warn_line
+
+                    warn_line(
+                        f"Kimi API error (attempt {attempt}/{MAX_RETRIES}): {e}"
+                    )
+                except Exception:
+                    print(f"Kimi API error (attempt {attempt}/{MAX_RETRIES}): {e}")
                 last_error = e
 
             if attempt < MAX_RETRIES:
-                print(f"    Retrying in {backoff}s...")
+                try:
+                    from pipeline.shared.terminal_ui import info_line
+
+                    info_line(f"Retrying in {backoff}s…")
+                except Exception:
+                    print(f"Retrying in {backoff}s…")
                 time.sleep(backoff)
                 backoff *= 2
 

@@ -542,10 +542,10 @@ def overlay_projected_scaffold_on_scan_pdf(
             n_drawn = len(exercise) + len(eq_blank)
             total_rects += n_drawn
             if verbose:
-                print(
-                    f"[bbox_overlay] page {page_idx + 1}/{n_doc}  "
-                    f"drawn={n_drawn} rects  (exercise={len(exercise)} "
-                    f"eq_blank={len(eq_blank)})"
+                tool_line(
+                    "overlay",
+                    f"page {page_idx + 1}/{n_doc} · {n_drawn} rects "
+                    f"(exercise={len(exercise)} eq_blank={len(eq_blank)})",
                 )
 
         doc.save(str(save_path), garbage=4, deflate=True)
@@ -556,10 +556,10 @@ def overlay_projected_scaffold_on_scan_pdf(
         save_path.replace(output_pdf)
 
     if verbose:
-        print(f"[bbox_overlay] Saved → {output_pdf}")
+        tool_line("overlay", f"Saved → {output_pdf}")
     else:
         tool_line(
-            "bbox_overlay",
+            "overlay",
             f"Projected {total_rects} scaffold rects on {n_overlay} page(s) → {output_pdf.name}",
         )
     return output_pdf

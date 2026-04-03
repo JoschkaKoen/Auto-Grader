@@ -19,7 +19,9 @@ def write_reflines_debug_pdf(deskewed_pdf: Path, dpi: int) -> Path | None:
     deskewed_pdf = Path(deskewed_pdf)
     sidecar = deskewed_pdf.with_name(deskewed_pdf.stem + "_reflines.json")
     if not sidecar.is_file():
-        print(f"[draw_scaffold_bounding_boxes] No reflines sidecar ({sidecar.name}) — skip reflines overlay")
+        from pipeline.shared.terminal_ui import info_line
+
+        info_line(f"No reflines sidecar ({sidecar.name}) — skip reflines overlay")
         return None
     out = deskewed_pdf.with_name(deskewed_pdf.stem + "_reflines_overlay.pdf")
     try:
@@ -28,7 +30,9 @@ def write_reflines_debug_pdf(deskewed_pdf: Path, dpi: int) -> Path | None:
         overlay_reflines_on_pdf(deskewed_pdf, sidecar, out, dpi=dpi)
         return out
     except Exception as e:
-        print(f"[draw_scaffold_bounding_boxes] Reflines overlay failed: {e}")
+        from pipeline.shared.terminal_ui import warn_line
+
+        warn_line(f"Reflines overlay failed: {e}")
         return None
 
 
@@ -59,13 +63,13 @@ def write_projected_scaffold_debug_pdf(
         msg = (
             "No *4up* raw exam PDF — skip projected overlay (needs four-up IGCSE anchors)."
         )
-        (warn_line if verbose else info_line)(f"[draw_scaffold_bounding_boxes] {msg}")
+        (warn_line if verbose else info_line)(msg)
         return None
 
     try:
         exam_for_scaffold = _find_exam_pdf(folder)
     except FileNotFoundError:
-        (warn_line if verbose else info_line)("[draw_scaffold_bounding_boxes] No raw exam PDF — skip projected overlay")
+        (warn_line if verbose else info_line)("No raw exam PDF — skip projected overlay")
         return None
 
     if not force_layout_mismatch and exam_for_scaffold.resolve() != raw4.resolve():
@@ -74,7 +78,7 @@ def write_projected_scaffold_debug_pdf(
             f"{exam_for_scaffold.name!r} but anchors use {raw4.name!r}. "
             "Use the same 4-up file for scaffold and anchors, or pass force_layout_mismatch."
         )
-        (warn_line if verbose else info_line)(f"[draw_scaffold_bounding_boxes] {msg}")
+        (warn_line if verbose else info_line)(msg)
         return None
 
     ad = artifact_dir if artifact_dir is not None else exam_artifact_dir(folder)
@@ -86,14 +90,12 @@ def write_projected_scaffold_debug_pdf(
         )
         roots = scaffold.questions
     except Exception as e:
-        warn_line(f"[draw_scaffold_bounding_boxes] Could not load scaffold: {e}")
+        warn_line(f"Could not load scaffold for projected overlay: {e}")
         return None
 
     sidecar = deskewed_pdf.with_name(deskewed_pdf.stem + "_reflines.json")
     if not sidecar.is_file():
-        (warn_line if verbose else info_line)(
-            "[draw_scaffold_bounding_boxes] Missing reflines JSON — skip projected overlay"
-        )
+        (warn_line if verbose else info_line)("Missing reflines JSON — skip projected overlay")
         return None
 
     out = deskewed_pdf.with_name(deskewed_pdf.stem + "_projected_boxes.pdf")
@@ -109,7 +111,7 @@ def write_projected_scaffold_debug_pdf(
         )
         return out
     except Exception as e:
-        warn_line(f"[draw_scaffold_bounding_boxes] Projected scaffold overlay failed: {e}")
+        warn_line(f"Projected scaffold overlay failed: {e}")
         return None
 
 

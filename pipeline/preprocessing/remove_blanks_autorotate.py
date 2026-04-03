@@ -76,7 +76,17 @@ def process_pdf(
     input_path = Path(input_path)
     output_path = Path(output_path)
 
-    from pipeline.shared.terminal_ui import BOLD, CYAN, err_line, icon, note_line, ok_line, paint, warn_line
+    from pipeline.shared.terminal_ui import (
+        BOLD,
+        CYAN,
+        err_line,
+        icon,
+        info_line,
+        note_line,
+        ok_line,
+        paint,
+        warn_line,
+    )
 
     if input_path.resolve() == output_path.resolve():
         err_line(
@@ -96,24 +106,15 @@ def process_pdf(
         note_line(
             f"Analysis DPI: {analysis_dpi}  |  Blank: mean≥{blank_mean}, std≤{blank_std}"
         )
-    else:
-        note_line(
-            f"PDF prep: {input_path.name}  |  OSD {analysis_dpi} DPI  |  "
-            f"blank mean≥{blank_mean}, std≤{blank_std}"
-        )
 
     if verbose:
         print(paint(f"\n  {icon('broom')}  Pass 1: blank detection @ {BLANK_DPI} DPI", CYAN, BOLD))
-    else:
-        note_line(f"Pass 1: blank detection @ {BLANK_DPI} DPI")
     low_res_pages = convert_from_path(
         str(input_path), dpi=BLANK_DPI, grayscale=True, thread_count=os.cpu_count() or 4
     )
     total_pages = len(low_res_pages)
     if verbose:
         print(f"Total pages: {total_pages}")
-    else:
-        note_line(f"{total_pages} pages scanned")
 
     content_page_nums: list[int] = []
     blank_page_nums: list[int] = []
@@ -127,11 +128,6 @@ def process_pdf(
 
     if verbose:
         print(f"  → {len(blank_page_nums)} blank pages, {len(content_page_nums)} content pages")
-    else:
-        note_line(
-            f"→ {len(blank_page_nums)} blank, {len(content_page_nums)} content pages "
-            "(blank source pages are dropped from the output PDF)"
-        )
 
     del low_res_pages
 
@@ -148,11 +144,6 @@ def process_pdf(
                 CYAN,
                 BOLD,
             )
-        )
-    else:
-        note_line(
-            f"Pass 2: OSD on {len(content_page_nums)} pages @ {analysis_dpi} DPI "
-            f"({num_workers} workers)"
         )
 
     rotation_map: dict[int, int] = {}
@@ -183,8 +174,14 @@ def process_pdf(
             if angle == 0:
                 parts.append(f"{n} upright")
             else:
-                parts.append(f"{n} rotate {angle}°")
-        note_line("Rotation: " + ", ".join(parts) if parts else "no content pages")
+                parts.append(f"{n}×{angle}°")
+        rot_s = ", ".join(parts) if parts else "—"
+        info_line(
+            f"{input_path.name}: {total_pages}p @ {BLANK_DPI} DPI "
+            f"(blank mean≥{blank_mean} σ≤{blank_std}) · "
+            f"drop {len(blank_page_nums)} → {len(content_page_nums)} content · "
+            f"OSD @ {analysis_dpi} DPI ({num_workers}w) · {rot_s}"
+        )
 
     src_pdf = pikepdf.open(str(input_path))
     out_pdf = pikepdf.new()
@@ -203,13 +200,19 @@ def process_pdf(
 
         out_pdf.pages.append(src_page)
 
-    note_line(f"Pages retained: {len(content_page_nums)}/{total_pages}")
-    note_line(f"Writing: {output_path}")
+    if verbose:
+        note_line(f"Pages retained: {len(content_page_nums)}/{total_pages}")
+        note_line(f"Writing: {output_path}")
 
     out_pdf.save(str(output_path))
     out_pdf.close()
     src_pdf.close()
 
-    ok_line("Passes 1–2 complete (rotate + de-blank).")
+    if verbose:
+        ok_line("Passes 1–2 complete (rotate + de-blank).")
+    else:
+        ok_line(
+            f"Prep done · {len(content_page_nums)}/{total_pages} pages → {output_path.name}"
+        )
     if verbose:
         print()
