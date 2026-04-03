@@ -13,7 +13,7 @@ def cleanup_pdf(
     *,
     artifact_dir: Path | None = None,
     output_base: str | Path = "output",
-    reclean: bool = False,
+    force_clean_scan: bool = False,
 ) -> Path:
     """Clean the scan PDF found in *folder*; write ``cleaned_scan.pdf`` under *artifact_dir*.
 
@@ -25,7 +25,7 @@ def cleanup_pdf(
     it is copied into *artifact_dir* once.
 
     Skips processing if the output already exists and is newer than the source,
-    unless *reclean* is true (output and matching reflines sidecar are removed first).
+    unless *force_clean_scan* is true (output and matching reflines sidecar are removed first).
 
     Pass 1: blank page removal (72 DPI)
     Pass 2: OSD 90-degree rotation (pikepdf lossless)
@@ -64,17 +64,17 @@ def cleanup_pdf(
     sidecar = output.with_name(f"{output.stem}_reflines.json")
     legacy_side = legacy_out.with_name(f"{legacy_out.stem}_reflines.json")
 
-    if reclean:
+    if force_clean_scan:
         for p in (output, sidecar, legacy_out, legacy_side):
             if p.exists():
                 p.unlink()
-                tool_line("pdf_cleanup", f"--reclean: removed {p.name}")
+                tool_line("pdf_cleanup", f"--force-clean-scan: removed {p.name}")
 
-    if not reclean and output.exists() and output.stat().st_mtime >= match.stat().st_mtime:
+    if not force_clean_scan and output.exists() and output.stat().st_mtime >= match.stat().st_mtime:
         tool_line("pdf_cleanup", f"Using cached cleaned scan: {output}")
         return output
 
-    if not reclean and legacy_out.exists() and legacy_out.stat().st_mtime >= match.stat().st_mtime:
+    if not force_clean_scan and legacy_out.exists() and legacy_out.stat().st_mtime >= match.stat().st_mtime:
         tool_line("pdf_cleanup", f"Migrating legacy {legacy_out.name} → {output} …")
         shutil.copy2(legacy_out, output)
         if legacy_side.is_file():

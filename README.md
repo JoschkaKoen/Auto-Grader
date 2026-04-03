@@ -101,8 +101,8 @@ python grade.py "check the first 5 students' answers" --dpi 300
 |--------|-------------|
 | `--folder PATH` | Path to the exam folder |
 | `--dpi N` | Override image DPI |
-| `--no-cleanup` | Skip class-scan preprocessing (no blanks/rotation/deskew); reuse `output/<exam_stem>/cleaned_scan.pdf`, a legacy cleaned scan in the exam folder, or fall back to a `*scan*.pdf` there |
-| `--reclean` | Drop the cached cleaned scan and rebuild it from the class scan (full preprocess + deskew) |
+| `--skip-clean-scan` | Skip class-scan prep; use `output/<exam_stem>/cleaned_scan.pdf`, a legacy cleaned scan in the exam folder, or a `*scan*.pdf` there |
+| `--force-clean-scan` | Ignore `cleaned_scan.pdf` cache and run full clean + deskew again (not combinable with `--skip-clean-scan`) |
 | `--no-report` | Print results to terminal only; skip LaTeX/PDF |
 
 Per-exam artifacts and run reports are always under `output/<exam_stem>/` and `output/<exam_stem>/runs/<timestamp>/` (not configurable).
@@ -121,7 +121,7 @@ When you run `grade.py`, it executes these steps in order:
 | 2. Find exam folder | `folder_discovery.py` | Resolves the exam folder from `--folder`, the parsed hint, or by scanning for directories named like `*test*` / `*exam*` |
 | 3. Load roster | `student_list.py` | Reads student names from `StudentList.xlsx` in the exam folder |
 | 4. Build scaffold | `scaffold.py` | Parses the exam PDF and answer key to produce a question tree with marks, bounding boxes, and correct answers (cached under `output/<exam_stem>/`) |
-| 5. Clean scan | `pdf_cleanup.py` | Same passes as autograder + deskew; writes `cleaned_scan.pdf` (and sidecar) under `output/<exam_stem>/`; skipped with `--no-cleanup` |
+| 5. Clean scan | `pdf_cleanup.py` | Same passes as autograder + deskew; writes `cleaned_scan.pdf` (and sidecar) under `output/<exam_stem>/`; skipped with `--skip-clean-scan` |
 | 6. Assign pages | `page_assignment.py` | Reads the name at the top of each scanned page with Kimi vision and maps pages to roster entries |
 | 7. Detect attempted questions | `answer_detection.py` | One Kimi call per page: asks which question numbers the student attempted; produces a per-student list used in step 8 to skip unanswered questions |
 | 8. Grade | `grading.py` | Grades only attempted questions. Three modes: `check_mc` (multiple choice), `check_answers` (all types), `count_marks` (tally teacher marks — step 7 filter ignored) |

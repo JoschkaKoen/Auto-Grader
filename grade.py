@@ -90,23 +90,16 @@ def parse_args() -> argparse.Namespace:
         help="Rendering DPI for page images (overrides AI-detected DPI, default 400)",
     )
     parser.add_argument(
-        "--no-cleanup",
+        "--skip-clean-scan",
         action="store_true",
         default=False,
-        help=(
-            "Skip class-scan preprocessing (no blank removal, rotation, or deskew). "
-            "Uses output/<exam_stem>/cleaned_scan.pdf if it exists, else a cleaned scan "
-            "still in the exam folder, else the first *scan*.pdf there."
-        ),
+        help="Skip class-scan prep (no rotate/blank/deskew); use output/<stem>/cleaned_scan.pdf, legacy cleaned scan, or a *scan*.pdf in the exam folder",
     )
     parser.add_argument(
-        "--reclean",
+        "--force-clean-scan",
         action="store_true",
         default=False,
-        help=(
-            "Ignore any cached cleaned scan: delete cleaned_scan.pdf (and reflines sidecar), "
-            "then run full preprocessing again from the class scan PDF."
-        ),
+        help="Ignore cleaned_scan cache and run full clean + deskew again",
     )
     parser.add_argument(
         "--rescaffold",
@@ -129,8 +122,8 @@ def parse_args() -> argparse.Namespace:
         help="Skip PDF report generation (terminal output only)",
     )
     args = parser.parse_args()
-    if args.no_cleanup and args.reclean:
-        parser.error("--no-cleanup and --reclean cannot be used together.")
+    if args.skip_clean_scan and args.force_clean_scan:
+        parser.error("--skip-clean-scan and --force-clean-scan cannot be used together.")
     return args
 
 
@@ -269,28 +262,28 @@ def _run(args: argparse.Namespace, timestamp: str) -> None:
     # Step 6: Clean scan PDF                                              #
     # ------------------------------------------------------------------ #
     pipeline_step(5, "Clean scan PDF")
-    if args.no_cleanup:
+    if args.skip_clean_scan:
         cleaned_here = artifact_dir / "cleaned_scan.pdf"
         legacy_cleaned = folder / "cleaned_scan.pdf"
         if cleaned_here.exists():
             cleaned_pdf = cleaned_here
-            info_line(f"--no-cleanup: using {cleaned_pdf}")
+            info_line(f"--skip-clean-scan: using {cleaned_pdf}")
         elif legacy_cleaned.exists():
             cleaned_pdf = legacy_cleaned
-            info_line(f"--no-cleanup: using legacy {cleaned_pdf}")
+            info_line(f"--skip-clean-scan: using legacy {cleaned_pdf}")
         else:
             scans = list(folder.glob("*.pdf"))
             scans = [f for f in scans if "scan" in f.name.lower()]
             if not scans:
-                err_line("--no-cleanup set but no scan PDF found.")
+                err_line("--skip-clean-scan set but no scan PDF found.")
                 raise SystemExit(1)
             cleaned_pdf = scans[0]
-            info_line(f"--no-cleanup: using {cleaned_pdf.name}")
+            info_line(f"--skip-clean-scan: using {cleaned_pdf.name}")
     else:
         cleaned_pdf = cleanup_pdf(
             folder,
             dpi=instruction.dpi,
-            reclean=args.reclean,
+            force_clean_scan=args.force_clean_scan,
             artifact_dir=artifact_dir,
         )
     if args.through_step == 5:
