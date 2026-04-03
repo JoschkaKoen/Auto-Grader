@@ -34,13 +34,13 @@ Install system dependencies:
 |------|------|
 | Grade a full exam folder from a plain-English prompt (includes scan clean + deskew) | `grade.py` |
 
-The `pipeline/extraction/` package (profiles, providers, reporting) remains available for custom scripts or tooling you add locally (`from pipeline.extraction import …`).
+The `extraction/` package (profiles, providers, reporting) remains available for custom scripts or tooling you add locally (`from extraction import …`).
 
-Scan rotation, blank-page removal, and fine deskew live in `pipeline/preprocessing/remove_blanks_autorotate.py` and `pipeline/preprocessing/deskew.py`, orchestrated by `pipeline/preprocessing/start_scan.py` when you run `grade.py`.
+Scan rotation, blank-page removal, and fine deskew live in `preprocessing/remove_blanks_autorotate.py` and `preprocessing/deskew.py`, orchestrated by `preprocessing/start_scan.py` when you run `grade.py`.
 
 ---
 
-### Fine deskew (`pipeline/preprocessing/start_scan.py`)
+### Fine deskew (`preprocessing/start_scan.py`)
 
 These A3-portrait scans contain two A4 exam sheets per page (top half and bottom half). The scanner introduces slightly different sub-degree skew in each half. The deskew pass:
 
@@ -53,7 +53,7 @@ These A3-portrait scans contain two A4 exam sheets per page (top half and bottom
 
 The toolchain **never overwrites the original scan PDF**: `remove_blanks_autorotate.process_pdf` refuses identical input/output paths, and deskew writes via a temp file before replacing `cleaned_scan.pdf` under the run directory.
 
-`pipeline/preprocessing/start_scan.py` runs fine deskew automatically (pass 3) when called from `grade.py`. Pass `deskew=False` to disable.
+`preprocessing/start_scan.py` runs fine deskew automatically (pass 3) when called from `grade.py`. Pass `deskew=False` to disable.
 
 ---
 
@@ -91,17 +91,17 @@ When you run `grade.py`, it executes these steps in order:
 
 | Step | Module | What it does |
 |------|--------|--------------|
-| 1. Parse prompt | `pipeline/marking/parse_instruction.py` | Converts plain English into a structured task (type, students, DPI, folder hint/path, scan/scaffold/report flags, optional `through_step`) |
-| 2. Find exam folder | `pipeline/marking/find_exam_folder.py` | Resolves the exam folder from `--folder`, then prompt `folder_path`, then hint / heuristic |
-| 3. Load roster | `pipeline/shared/load_student_list.py` | Reads student names from `StudentList.xlsx` in the exam folder |
-| 4. Build scaffold | `pipeline/scaffold/generate_scaffold.py` | Parses the exam PDF and answer key to produce a question tree with marks, bounding boxes, and correct answers (cached under the run directory) |
-| 5. Clean scan | `pipeline/preprocessing/start_scan.py` | Blank removal + OSD rotation (`remove_blanks_autorotate`) + deskew; writes `cleaned_scan.pdf` (and sidecar) under the run directory; skipped with `--skip-clean-scan` |
-| 6. Assign pages | `pipeline/marking/assign_pages_to_students.py` | Reads the name at the top of each scanned page with Kimi vision and maps pages to roster entries |
-| 7. Detect attempted questions | `pipeline/marking/detect_answered_questions.py` | One Kimi call per page: asks which question numbers the student attempted; produces a per-student list used in step 8 to skip unanswered questions |
-| 8. Grade | `pipeline/marking/grade_answers.py` | Grades only attempted questions. Three modes: `check_mc` (multiple choice), `check_answers` (all types), `count_marks` (tally teacher marks — step 7 filter ignored) |
-| 9. Print results | `pipeline/reports/print_results.py` | Displays scaffold, page assignments, marks table, and accuracy in the terminal |
-| 10. Ground truth | `pipeline/shared/load_ground_truth.py` | If a ground-truth file exists in the folder, computes and displays per-student accuracy |
-| 11. Generate report | `pipeline/reports/generate_report.py` | Produces a LaTeX/PDF report with results table and class statistics; skipped with `--no-report` |
+| 1. Parse prompt | `marking/parse_instruction.py` | Converts plain English into a structured task (type, students, DPI, folder hint/path, scan/scaffold/report flags, optional `through_step`) |
+| 2. Find exam folder | `marking/find_exam_folder.py` | Resolves the exam folder from `--folder`, then prompt `folder_path`, then hint / heuristic |
+| 3. Load roster | `shared/load_student_list.py` | Reads student names from `StudentList.xlsx` in the exam folder |
+| 4. Build scaffold | `scaffold/generate_scaffold.py` | Parses the exam PDF and answer key to produce a question tree with marks, bounding boxes, and correct answers (cached under the run directory) |
+| 5. Clean scan | `preprocessing/start_scan.py` | Blank removal + OSD rotation (`remove_blanks_autorotate`) + deskew; writes `cleaned_scan.pdf` (and sidecar) under the run directory; skipped with `--skip-clean-scan` |
+| 6. Assign pages | `marking/assign_pages_to_students.py` | Reads the name at the top of each scanned page with Kimi vision and maps pages to roster entries |
+| 7. Detect attempted questions | `marking/detect_answered_questions.py` | One Kimi call per page: asks which question numbers the student attempted; produces a per-student list used in step 8 to skip unanswered questions |
+| 8. Grade | `marking/grade_answers.py` | Grades only attempted questions. Three modes: `check_mc` (multiple choice), `check_answers` (all types), `count_marks` (tally teacher marks — step 7 filter ignored) |
+| 9. Print results | `reports/print_results.py` | Displays scaffold, page assignments, marks table, and accuracy in the terminal |
+| 10. Ground truth | `shared/load_ground_truth.py` | If a ground-truth file exists in the folder, computes and displays per-student accuracy |
+| 11. Generate report | `reports/generate_report.py` | Produces a LaTeX/PDF report with results table and class statistics; skipped with `--no-report` |
 
 ---
 
@@ -113,7 +113,7 @@ The scaffold is the structured model of the exam: question numbers, stems, answe
 - A **raw exam PDF** — filename containing `raw` or `exam`, but not `answer` or `scan`
 - An **answer key PDF** (optional) — filename containing `answer`
 
-**How it works (`pipeline/scaffold/generate_scaffold.py` + `pipeline/scaffold/pdf_parser/`):**
+**How it works (`scaffold/generate_scaffold.py` + `scaffold/pdf_parser/`):**
 
 1. **Exam PDF** — Detect question numbers from left-margin text (`get_text("dict")`, font-size band). Compute vertical regions per question; extract exact stem text; detect rectangles and ruled lines as writing areas; rasterise embedded figures to `scaffold_images/` under the run directory. Sub-questions (`9a`, `9b`, `11ci`, `11cii`, …) are split from Cambridge-style `(a)` / `(i)` / `(ii)` patterns.
 2. **Answer key PDF** — Parsed as text only; two sources of answers are merged:
@@ -148,16 +148,16 @@ All tunables live in `config.py`: AI model, DPI, crop fractions, API retry setti
 
 | Setting | Purpose |
 |---------|---------|
-| `AI_MODEL` | Default model hint for `pipeline/extraction/` providers (`gemini-*` or `kimi-*`) |
+| `AI_MODEL` | Default model hint for `extraction/` providers (`gemini-*` or `kimi-*`) |
 | `PIPELINE_AI_MODEL` | Model for `grade.py` |
 | `PDF_DPI` | DPI for image conversion |
-| `EXAM_PROFILE` | Layout profile when using `pipeline/extraction/` programmatically |
+| `EXAM_PROFILE` | Layout profile when using `extraction/` programmatically |
 
 ---
 
 ## Ground truth
 
-`grade.py` evaluates against a ground-truth file in the exam folder when present (`pipeline/shared/load_ground_truth.py`). The `pipeline/extraction/ground_truth.py` helpers target `GROUND_TRUTH_PATH` in `config.py` if you build your own tooling on top of `pipeline/extraction/`.
+`grade.py` evaluates against a ground-truth file in the exam folder when present (`shared/load_ground_truth.py`). The `extraction/ground_truth.py` helpers target `GROUND_TRUTH_PATH` in `config.py` if you build your own tooling on top of `extraction/`.
 
 ---
 
@@ -166,13 +166,13 @@ All tunables live in `config.py`: AI model, DPI, crop fractions, API retry setti
 ```
 grade.py             Prompt-driven grading CLI
 config.py            Models, DPI, paths, and all tunables
-pipeline/            Full grading pipeline (see pipeline/README.md)
-  extraction/        Profiles, AI providers, reporting (library)
-  preprocessing/     start_scan, remove_blanks_autorotate, deskew, draw_scaffold_bounding_boxes
-  scaffold/          generate_scaffold, draw_boxes_on_empty_exam, project_boxes_on_scanned_exam, pdf_parser/
-  marking/           parse_instruction, find_exam_folder, assign_pages_to_students, …
-  reports/           print_results, generate_report
-  shared/            models, exam_paths, terminal_ui, load_student_list, load_ground_truth
+PIPELINE_README.md   Package map for the steps below (formerly pipeline/README.md)
+extraction/          Profiles, AI providers, reporting (library)
+preprocessing/       start_scan, remove_blanks_autorotate, deskew, draw_scaffold_bounding_boxes
+scaffold/            generate_scaffold, draw_boxes_on_empty_exam, project_boxes_on_scanned_exam, pdf_parser/
+marking/             parse_instruction, find_exam_folder, assign_pages_to_students, …
+reports/             print_results, generate_report
+shared/              models, exam_paths, terminal_ui, load_student_list, load_ground_truth
 ```
 
 ---
