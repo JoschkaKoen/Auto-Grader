@@ -12,7 +12,7 @@ from typing import Any
 from pydantic import BaseModel, ValidationError
 
 from config import AI_MODEL, KIMI_MAX_TOKENS, KIMI_THINKING, MAX_RETRIES, RETRY_BACKOFF_S
-from extraction.images import normalize_extracted_record
+from pipeline.extraction.images import normalize_extracted_record
 
 
 try:

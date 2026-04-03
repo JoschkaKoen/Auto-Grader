@@ -92,11 +92,11 @@ def assign_pages(
     If *client* is None it is created via ``KimiProvider.create_client()``.
     *verbose*: when False (``grade.py``), log only sparse progress instead of every page.
     """
-    from extraction.ground_truth import fuzzy_match_name
+    from pipeline.extraction.ground_truth import fuzzy_match_name
     from pdf2image import convert_from_path
 
     if client is None:
-        from extraction.providers.kimi import KimiProvider
+        from pipeline.extraction.providers.kimi import KimiProvider
         client = KimiProvider.create_client()
     if client is None:
         raise RuntimeError("No Kimi client available for page assignment.")

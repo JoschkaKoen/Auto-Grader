@@ -22,7 +22,7 @@ from config import (
     RETRY_BACKOFF_S,
     USE_ENSEMBLE,
 )
-from extraction.images import normalize_extracted_record
+from pipeline.extraction.images import normalize_extracted_record
 
 
 def _failed_record(last_error: Exception | str | None, answer_fields: list[str]) -> dict:

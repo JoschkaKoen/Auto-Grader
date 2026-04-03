@@ -20,3 +20,4 @@ Ground Truth*
 
 # Local agent / benchmark logs
 improvement_log.jsonl
+logs/

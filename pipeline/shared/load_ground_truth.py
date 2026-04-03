@@ -182,7 +182,7 @@ def evaluate_results(
         overall_total:   int
         overall_accuracy_pct: float
     """
-    from extraction.ground_truth import fuzzy_match_name
+    from pipeline.extraction.ground_truth import fuzzy_match_name
 
     gt_names = list(ground_truth.keys())
     q_nums = [q.number for q in scaffold.gradable_questions]

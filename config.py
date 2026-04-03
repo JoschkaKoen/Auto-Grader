@@ -21,7 +21,7 @@ How to run (from repo root, with venv activated and dependencies installed):
     # Optional CLI (also inferable from prompt JSON): --dpi  --folder  --skip-clean-scan
     #   --force-clean-scan  --rescaffold  --through-step N  --no-report
 
-Tunables below apply to extraction/ (library), pipeline/*, and grade.py
+Tunables below apply to pipeline/extraction/, pipeline/*, and grade.py
 (PIPELINE_*, NAME_*, etc.).
 """
 
@@ -44,7 +44,7 @@ from pathlib import Path
 #   2. Set AI_MODEL environment variable (takes precedence)
 AI_MODEL = os.getenv("AI_MODEL", "kimi-k2.5")
 
-# Exam layout + prompt + schema (see extraction/profiles/)
+# Exam layout + prompt + schema (see pipeline/extraction/profiles/)
 EXAM_PROFILE = "igcse_physics"
 
 # =============================================================================

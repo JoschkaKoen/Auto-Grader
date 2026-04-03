@@ -85,7 +85,7 @@ def detect_answered_exercises(
     from pdf2image import convert_from_path
 
     if client is None:
-        from extraction.providers.kimi import KimiProvider
+        from pipeline.extraction.providers.kimi import KimiProvider
         client = KimiProvider.create_client()
     if client is None:
         raise RuntimeError("No Kimi client available for answer detection.")

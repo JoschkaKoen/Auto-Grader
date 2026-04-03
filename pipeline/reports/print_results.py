@@ -7,7 +7,7 @@ import shutil
 import statistics
 import textwrap
 
-from extraction.reporting import Colors
+from pipeline.extraction.reporting import Colors
 
 from pipeline.shared.models import ExamScaffold, PageAssignment, StudentResult
 from pipeline.shared.terminal_ui import icon, paint, rule, BOLD, CYAN

@@ -6,7 +6,7 @@ import json
 import subprocess
 from pathlib import Path
 
-from extraction.ground_truth import fuzzy_match_name
+from pipeline.extraction.ground_truth import fuzzy_match_name
 
 
 class Colors:

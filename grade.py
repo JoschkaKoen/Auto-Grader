@@ -150,7 +150,7 @@ def main() -> None:
 
 def _run(args: argparse.Namespace, timestamp: str) -> None:
     # Late imports after dotenv so env vars are available
-    from extraction.providers.kimi import KimiProvider
+    from pipeline.extraction.providers.kimi import KimiProvider
 
     from pipeline.shared.terminal_ui import (
         err_line,

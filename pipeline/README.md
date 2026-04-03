@@ -6,6 +6,7 @@ The grading pipeline is split into **domain subpackages** under `pipeline/`. [`g
 
 | Folder | Role |
 |--------|------|
+| [`extraction/`](extraction/) | AI vision extraction: profiles, providers (Gemini/Kimi), reporting helpers. |
 | [`preprocessing/`](preprocessing/) | Raw class scan → `cleaned_scan.pdf` (blank removal, autorotate, deskew, optional debug PDFs). |
 | [`scaffold/`](scaffold/) | Vector exam + answer key → `ExamScaffold`, cache, figure PNGs, boxes on empty exam, geometry onto scans. |
 | [`marking/`](marking/) | Kimi-driven steps: parse instruction, find folder, assign pages, detect attempted questions, grade. |

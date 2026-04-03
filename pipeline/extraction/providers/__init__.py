@@ -11,10 +11,10 @@ from google import genai
 
 from config import AI_MODEL
 
-from extraction.images import normalize_extracted_record
-from extraction.profiles.base import ExamProfile
-from extraction.providers.gemini import GeminiProvider
-from extraction.providers.kimi import KimiProvider
+from pipeline.extraction.images import normalize_extracted_record
+from pipeline.extraction.profiles.base import ExamProfile
+from pipeline.extraction.providers.gemini import GeminiProvider
+from pipeline.extraction.providers.kimi import KimiProvider
 
 
 def get_provider() -> GeminiProvider | KimiProvider:

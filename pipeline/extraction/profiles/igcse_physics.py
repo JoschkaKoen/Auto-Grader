@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel
 
-from extraction.profiles.base import ExamProfile
+from pipeline.extraction.profiles.base import ExamProfile
 
 
 class StudentAnswers(BaseModel):

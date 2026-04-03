@@ -128,7 +128,7 @@ def parse_prompt(
     Falls back to a simple keyword heuristic if the Kimi call fails.
     """
     if client is None:
-        from extraction.providers.kimi import KimiProvider
+        from pipeline.extraction.providers.kimi import KimiProvider
         client = KimiProvider.create_client()
 
     instruction = _heuristic_fallback(prompt, dpi_override)

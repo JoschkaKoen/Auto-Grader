@@ -34,7 +34,7 @@ Install system dependencies:
 |------|------|
 | Grade a full exam folder from a plain-English prompt (includes scan clean + deskew) | `grade.py` |
 
-The `extraction/` package (profiles, providers, reporting) remains available for custom scripts or tooling you add locally.
+The `pipeline/extraction/` package (profiles, providers, reporting) remains available for custom scripts or tooling you add locally (`from pipeline.extraction import …`).
 
 Scan rotation, blank-page removal, and fine deskew live in `pipeline/preprocessing/remove_blanks_autorotate.py` and `pipeline/preprocessing/deskew.py`, orchestrated by `pipeline/preprocessing/start_scan.py` when you run `grade.py`.
 
@@ -148,16 +148,16 @@ All tunables live in `config.py`: AI model, DPI, crop fractions, API retry setti
 
 | Setting | Purpose |
 |---------|---------|
-| `AI_MODEL` | Default model hint for `extraction/` providers (`gemini-*` or `kimi-*`) |
+| `AI_MODEL` | Default model hint for `pipeline/extraction/` providers (`gemini-*` or `kimi-*`) |
 | `PIPELINE_AI_MODEL` | Model for `grade.py` |
 | `PDF_DPI` | DPI for image conversion |
-| `EXAM_PROFILE` | Layout profile when using `extraction/` programmatically |
+| `EXAM_PROFILE` | Layout profile when using `pipeline/extraction/` programmatically |
 
 ---
 
 ## Ground truth
 
-`grade.py` evaluates against a ground-truth file in the exam folder when present (`pipeline/shared/load_ground_truth.py`). The `extraction/ground_truth.py` helpers target `GROUND_TRUTH_PATH` in `config.py` if you build your own tooling on top of `extraction/`.
+`grade.py` evaluates against a ground-truth file in the exam folder when present (`pipeline/shared/load_ground_truth.py`). The `pipeline/extraction/ground_truth.py` helpers target `GROUND_TRUTH_PATH` in `config.py` if you build your own tooling on top of `pipeline/extraction/`.
 
 ---
 
@@ -166,8 +166,8 @@ All tunables live in `config.py`: AI model, DPI, crop fractions, API retry setti
 ```
 grade.py             Prompt-driven grading CLI
 config.py            Models, DPI, paths, and all tunables
-extraction/          Profiles, AI providers, reporting (library)
 pipeline/            Full grading pipeline (see pipeline/README.md)
+  extraction/        Profiles, AI providers, reporting (library)
   preprocessing/     start_scan, remove_blanks_autorotate, deskew, draw_scaffold_bounding_boxes
   scaffold/          generate_scaffold, draw_boxes_on_empty_exam, project_boxes_on_scanned_exam, pdf_parser/
   marking/           parse_instruction, find_exam_folder, assign_pages_to_students, …
