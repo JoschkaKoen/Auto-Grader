@@ -32,10 +32,22 @@ from pipeline.pdf_parser.content import normalize_multiple_choice_tree
 from pipeline.scaffold_overlay import write_scaffold_boxes_pdf
 
 
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 15
 
 
 def _find_exam_pdf(folder: Path) -> Path:
+    """Pick the vector exam PDF for parsing.
+
+    When a four-up raw exam exists (see :func:`pipeline.bbox_projection.find_raw_four_up_pdf`),
+    it is **always** used so question bboxes live in the same PDF space as IGCSE anchors used
+    to project onto scans. Otherwise fall back to any raw/exam PDF (e.g. 2-up, 1-up).
+    """
+    from pipeline.bbox_projection import find_raw_four_up_pdf
+
+    four_up = find_raw_four_up_pdf(folder)
+    if four_up is not None:
+        return four_up
+
     pdfs = [
         f
         for f in folder.glob("*.pdf")
@@ -45,13 +57,7 @@ def _find_exam_pdf(folder: Path) -> Path:
     ]
     if not pdfs:
         raise FileNotFoundError(f"No raw exam PDF found in {folder}")
-    # Prefer 4-up imposition when present so bbox coordinates match
-    # :func:`pipeline.bbox_projection.extract_raw_igcse_anchors` (scan projection).
-    ordered = sorted(pdfs, key=lambda p: p.name.lower())
-    four_up = [p for p in ordered if "4up" in p.name.lower()]
-    if four_up:
-        return four_up[0]
-    return ordered[0]
+    return sorted(pdfs, key=lambda p: p.name.lower())[0]
 
 
 def _find_answer_pdf(folder: Path) -> Path | None:
@@ -216,6 +222,11 @@ def _load_cache(folder: Path) -> ExamScaffold:
         raise FileNotFoundError(f"No scaffold cache in {folder}")
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
+    if data.get("schema_version") != SCHEMA_VERSION:
+        raise ValueError(
+            "scaffold cache schema_version mismatch — rebuild required "
+            f"(got {data.get('schema_version')!r}, need {SCHEMA_VERSION})"
+        )
     questions = [question_from_dict(q) for q in data["questions"]]
     flat = flatten_questions(questions)
     total = int(data.get("total_marks", 0))

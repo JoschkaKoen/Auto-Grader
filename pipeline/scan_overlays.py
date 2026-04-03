@@ -1,4 +1,8 @@
-"""Write debug PDFs on deskewed scans: reflines overlay and projected scaffold boxes."""
+"""Write debug PDFs on deskewed scans (projected scaffold boxes).
+
+The reflines overlay PDF writer is kept for optional manual use; the pipeline does not
+generate ``*_reflines_overlay.pdf`` by default (see :func:`write_reflines_debug_pdf`).
+"""
 
 from __future__ import annotations
 
@@ -7,7 +11,12 @@ from pathlib import Path
 
 
 def write_reflines_debug_pdf(deskewed_pdf: Path, dpi: int) -> Path | None:
-    """Draw vertical reflines + anchor crosshairs from the deskew sidecar."""
+    """Draw vertical reflines + anchor crosshairs from the deskew sidecar.
+
+    Not invoked from :func:`write_scan_debug_pdfs_after_deskew` by default; call this
+    explicitly (or use ``visualize_scan_overlays.py --reflines-overlay``) if you need
+    the PDF for debugging.
+    """
     deskewed_pdf = Path(deskewed_pdf)
     sidecar = deskewed_pdf.with_name(deskewed_pdf.stem + "_reflines.json")
     if not sidecar.is_file():
@@ -101,7 +110,7 @@ def write_scan_debug_pdfs_after_deskew(
     dpi: int,
     *,
     force_projected_mismatch: bool = False,
-    write_reflines: bool = True,
+    write_reflines: bool = False,
     write_projected: bool = True,
 ) -> None:
     """After a successful deskew, write optional debug PDFs next to *deskewed_pdf*."""
