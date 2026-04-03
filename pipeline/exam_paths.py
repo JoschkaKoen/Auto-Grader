@@ -29,9 +29,9 @@ def legacy_artifact_scaffold_cache_path(artifact_dir: Path) -> Path:
     return artifact_dir / "scaffolds" / "scaffold_cache.json"
 
 
-def artifact_overlays_dir(artifact_dir: Path) -> Path:
-    """Vector-exam scaffold box PDFs and similar overlays."""
-    return artifact_dir / "overlays"
+def artifact_scaffold_boxes_path(artifact_dir: Path) -> Path:
+    """Vector-exam PDF with scaffold rectangles drawn (one file per run)."""
+    return artifact_dir / "scaffold_boxes.pdf"
 
 
 def extract_answers_output_dir(

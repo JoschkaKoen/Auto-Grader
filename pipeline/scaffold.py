@@ -26,11 +26,10 @@ from pipeline.models import (
     gradable_questions,
 )
 from pipeline.exam_paths import (
-    artifact_overlays_dir,
+    artifact_scaffold_boxes_path,
     artifact_scaffold_cache_path,
     exam_artifact_dir,
     legacy_artifact_scaffold_cache_path,
-    safe_path_stem,
 )
 from pipeline.pdf_parser import (
     merge_answers_into_scaffold,
@@ -426,9 +425,7 @@ def build_scaffold(
     )
     _save_cache(ad, scaffold)
     _clear_legacy_scaffold_outputs(folder)
-    od = artifact_overlays_dir(ad)
-    od.mkdir(parents=True, exist_ok=True)
-    boxes_out = od / f"{safe_path_stem(exam_pdf.stem)}_scaffold_boxes.pdf"
+    boxes_out = artifact_scaffold_boxes_path(ad)
     out_pdf, n_rects, n_pages = write_scaffold_boxes_pdf(
         exam_pdf, questions, output_path=boxes_out
     )
