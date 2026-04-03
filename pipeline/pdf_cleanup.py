@@ -5,16 +5,21 @@ from __future__ import annotations
 from pathlib import Path
 
 
-def cleanup_pdf(folder: Path, dpi: int = 300) -> Path:
+def cleanup_pdf(folder: Path, dpi: int = 300, deskew: bool = True) -> Path:
     """Clean the scan PDF in *folder* and return the path to the output PDF.
 
     Looks for a file whose name contains "scan" (case-insensitive).
     Output: ``{folder}/cleaned_scan.pdf``.
     Skips processing if the output already exists and is newer than the source.
 
+    Pass 1: blank page removal (72 DPI)
+    Pass 2: OSD 90-degree rotation (pikepdf lossless)
+    Pass 3: per-half fine deskew via projection variance (rasterised at *dpi*)
+            — only when ``deskew=True`` (default).
+
     Raises ``FileNotFoundError`` if no scan PDF is found.
     """
-    # Late import so the pipeline package doesn't force autograder deps at module load
+    # Late imports so the pipeline package doesn't force autograder deps at module load
     from autograder import process_pdf  # type: ignore[import]
 
     scans = [
@@ -43,4 +48,9 @@ def cleanup_pdf(folder: Path, dpi: int = 300) -> Path:
         output_path=str(output),
         analysis_dpi=dpi,
     )
+
+    if deskew:
+        from pipeline.scan_deskew import deskew_pdf_raster  # type: ignore[import]
+        deskew_pdf_raster(output, output, dpi=dpi)
+
     return output

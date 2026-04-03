@@ -4,7 +4,7 @@
 
 Auto-Grader is a Python-based CLI toolchain for processing scanned IGCSE Physics exam papers. It provides two main capabilities:
 
-1. **PDF Preprocessing** (`autograder.py`): Cleans scanned exam PDFs by auto-rotating pages to upright orientation using Tesseract OSD, removing blank/white pages, and writing a new PDF with pages copied losslessly using `pikepdf`.
+1. **PDF Preprocessing** (`autograder.py` + `pipeline/scan_deskew.py`): Cleans scanned exam PDFs in three passes: (1) blank/white page removal; (2) 90-degree auto-rotation using Tesseract OSD, with pages copied losslessly via `pikepdf`; (3) optional fine deskew — each A3-portrait page is split into top/bottom A4 halves, sub-degree skew is detected per half via vertical-projection variance (OpenCV), correction is applied at full resolution with bicubic interpolation, and the result is embedded as a rasterised PDF. The `--deskew` CLI flag enables pass 3 from `autograder.py`; `pipeline/pdf_cleanup.py` runs it automatically (pass `deskew=False` to skip).
 
 2. **Answer Extraction** (`extract_answers.py` + `extraction/` package): Uses Gemini or Kimi vision APIs (see `config.AI_MODEL`) to extract student names and handwritten multiple-choice answers (Questions 38-40), with structured output via Pydantic exam profiles.
 
@@ -16,7 +16,8 @@ The project is designed for educators who need to process batches of scanned exa
 - **Core Dependencies**:
   - `pdf2image` (≥1.17.0) — PDF to image conversion
   - `pytesseract` (≥0.3.13) — OCR for orientation detection
-  - `pikepdf` (≥10.0.0) — Lossless PDF manipulation
+  - `pikepdf` (≥10.0.0) — Lossless PDF manipulation (passes 1–2)
+  - `opencv-python-headless` (≥4.9.0) — Image processing for fine deskew (pass 3)
   - `google-genai` (≥1.0.0) — Gemini Vision API client
   - `openai` (optional) — Kimi / Moonshot (OpenAI-compatible) client
   - `pydantic` (≥2.0.0) — Structured output validation
@@ -125,13 +126,25 @@ Main functions:
 - `detect_rotation(image)` → int: Uses Tesseract OSD to detect rotation angle (0°, 90°, 180°, 270°)
 - `is_blank_page(image, mean_threshold, std_threshold)` → bool: Detects blank pages using grayscale statistics
 - `_osd_worker(page_num, input_path, dpi)` → tuple: Parallel worker for rotation detection
-- `process_pdf(input_path, output_path, ...)` → None: Main processing pipeline
+- `process_pdf(input_path, output_path, ...)` → None: Passes 1–2 of the pipeline
 
-Processing pipeline:
+Processing pipeline (passes 1–2):
 1. Render all pages at low DPI (72) for fast blank detection
 2. Filter out pages where mean ≥ threshold AND std ≤ threshold
 3. Run parallel OSD at full DPI (300) on content pages only
-4. Build output PDF with rotation metadata applied
+4. Build output PDF with rotation metadata applied (lossless pikepdf)
+
+CLI flag `--deskew` triggers pass 3 (see `pipeline/scan_deskew.py`) after `process_pdf` completes.
+
+### pipeline/scan_deskew.py
+
+Fine deskew module for A3-portrait scans. **Output PDF is rasterised** at the chosen DPI (no vector text).
+
+Main functions:
+- `get_deskew_angle(gray)` → float: Downsample to ~1000 px, Otsu binarise, sweep -3°…+3° in 0.05° steps, return best angle by max vertical-projection variance.
+- `deskew_image(gray, angle)` → np.ndarray: Apply angle at full resolution with `INTER_CUBIC`; skip if `|angle| < 0.05°`.
+- `deskew_page_halves(page_gray)` → (array, top_angle, bot_angle): Split at midpoint, detect and correct each half independently, reassemble.
+- `deskew_pdf_raster(input_pdf, output_pdf, dpi)` → Path: Render all pages, deskew per page, assemble via PyMuPDF. Prints per-page angles to console.
 
 ### extract_answers.py + `extraction/`
 

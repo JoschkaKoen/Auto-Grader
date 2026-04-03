@@ -222,6 +222,15 @@ def main():
                         help=f"Grayscale mean above which a page is blank (default: {BLANK_MEAN_THRESHOLD})")
     parser.add_argument("--blank-std", type=float, default=BLANK_STD_THRESHOLD,
                         help=f"Grayscale std below which a page is blank (default: {BLANK_STD_THRESHOLD})")
+    deskew_group = parser.add_mutually_exclusive_group()
+    deskew_group.add_argument(
+        "--deskew", dest="deskew", action="store_true", default=False,
+        help="Run per-half fine deskew pass after OSD rotation (rasterises output at --dpi)",
+    )
+    deskew_group.add_argument(
+        "--no-deskew", dest="deskew", action="store_false",
+        help="Skip fine deskew pass (default)",
+    )
     args = parser.parse_args()
 
     process_pdf(
@@ -231,6 +240,14 @@ def main():
         blank_mean=args.blank_threshold,
         blank_std=args.blank_std,
     )
+
+    if args.deskew:
+        from pipeline.scan_deskew import deskew_pdf_raster  # type: ignore[import]
+        deskew_pdf_raster(
+            input_pdf=Path(args.output),
+            output_pdf=Path(args.output),
+            dpi=args.dpi,
+        )
 
 
 if __name__ == "__main__":

@@ -45,13 +45,28 @@ Rotates pages and removes blanks using Tesseract and pikepdf. No API calls.
 ```bash
 python autograder.py input.pdf output.pdf
 python autograder.py scan.pdf cleaned.pdf --dpi 200 --blank-threshold 248 --blank-std 6
+python autograder.py scan.pdf cleaned.pdf --deskew   # also run fine deskew
 ```
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--dpi` | 300 | DPI for orientation detection |
+| `--dpi` | 300 | DPI for orientation detection and deskew output |
 | `--blank-threshold` | 250 | Mean grayscale ≥ this → blank |
 | `--blank-std` | 6 | Std dev ≤ this → blank |
+| `--deskew` / `--no-deskew` | off | Run per-half fine deskew pass (see below) |
+
+### Fine deskew (`--deskew` / `pipeline/pdf_cleanup.py`)
+
+These A3-portrait scans contain two A4 exam sheets per page (top half and bottom half). The scanner introduces slightly different sub-degree skew in each half. The deskew pass:
+
+1. **Splits** each page at the vertical midpoint into top and bottom halves.
+2. **Detects** the rotation angle per half using vertical-projection variance on a cheap downsampled proxy — printed vertical ruling lines produce sharp column-sum peaks when aligned.
+3. **Applies** the correction once per half at full resolution (`INTER_CUBIC`, white fill).
+4. **Reassembles** the halves and embeds all pages into a rasterised output PDF.
+
+> **Note:** Fine deskew rasterises the output at the chosen `--dpi`. The result is a bitmap-only PDF (pages are not selectable as vector text), which is acceptable for downstream OCR / AI grading.
+
+`pipeline/pdf_cleanup.py` runs fine deskew automatically (pass 3) when called from `grade.py`. Pass `deskew=False` to disable.
 
 ---
 
@@ -102,7 +117,7 @@ When you run `grade.py`, it executes these steps in order:
 | 2. Find exam folder | `folder_discovery.py` | Resolves the exam folder from `--folder`, the parsed hint, or by scanning for directories named like `*test*` / `*exam*` |
 | 3. Load roster | `student_list.py` | Reads student names from `StudentList.xlsx` in the exam folder |
 | 4. Build scaffold | `scaffold.py` | Parses the exam PDF and answer key to produce a question tree with marks, bounding boxes, and correct answers (cached) |
-| 5. Clean scan | `pdf_cleanup.py` | Rotates pages and removes blanks; skipped with `--no-cleanup` |
+| 5. Clean scan | `pdf_cleanup.py` | Pass 1: blank removal; Pass 2: OSD 90° rotation (pikepdf lossless); Pass 3: per-half fine deskew at `--dpi` (projection variance on vertical lines); skipped with `--no-cleanup` |
 | 6. Assign pages | `page_assignment.py` | Reads the name at the top of each scanned page with Kimi vision and maps pages to roster entries |
 | 7. Detect attempted questions | `answer_detection.py` | One Kimi call per page: asks which question numbers the student attempted; produces a per-student list used in step 8 to skip unanswered questions |
 | 8. Grade | `grading.py` | Grades only attempted questions. Three modes: `check_mc` (multiple choice), `check_answers` (all types), `count_marks` (tally teacher marks — step 7 filter ignored) |
