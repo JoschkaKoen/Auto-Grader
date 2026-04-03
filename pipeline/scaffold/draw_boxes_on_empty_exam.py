@@ -73,7 +73,7 @@ def write_scaffold_boxes_pdf(
     """
     exam_pdf = exam_pdf.resolve()
     if output_path is None:
-        output_path = exam_pdf.with_name(f"{exam_pdf.stem}_scaffold_boxes.pdf")
+        output_path = exam_pdf.with_name(f"{exam_pdf.stem}_raw_exam_bboxes.pdf")
     else:
         output_path = output_path.resolve()
 

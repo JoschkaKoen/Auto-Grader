@@ -31,7 +31,7 @@ def legacy_artifact_scaffold_cache_path(artifact_dir: Path) -> Path:
 
 def artifact_scaffold_boxes_path(artifact_dir: Path) -> Path:
     """Vector-exam PDF with scaffold rectangles drawn (one file per run)."""
-    return artifact_dir / "scaffold_boxes.pdf"
+    return artifact_dir / "raw_exam_bboxes.pdf"
 
 
 def extract_answers_output_dir(
