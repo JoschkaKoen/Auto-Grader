@@ -107,24 +107,30 @@ def process_pdf(input_path: str,
     input_path = Path(input_path)
     output_path = Path(output_path)
 
+    from pipeline.terminal_ui import BOLD, CYAN, err_line, icon, note_line, ok_line, paint, warn_line
+
     if input_path.resolve() == output_path.resolve():
-        print(
-            "ERROR: Input and output paths are the same — refusing to overwrite "
-            "the source PDF. Choose a different output path."
+        err_line(
+            "Input and output paths are the same — refusing to overwrite the source PDF. "
+            "Choose a different output path."
         )
         sys.exit(1)
 
     if not input_path.exists():
-        print(f"ERROR: Input file not found: {input_path}")
+        err_line(f"Input file not found: {input_path}")
         sys.exit(1)
 
-    print(f"\nProcessing: {input_path}")
-    print(f"Analysis DPI: {analysis_dpi}  |  Blank thresholds: mean≥{blank_mean}, std≤{blank_std}")
+    print()
+    print(paint(f"  {icon('doc')}  autograder  —  {input_path.name}", CYAN, BOLD))
+    note_line(f"Full path: {input_path}")
+    note_line(
+        f"Analysis DPI: {analysis_dpi}  |  Blank: mean≥{blank_mean}, std≤{blank_std}"
+    )
 
     # ------------------------------------------------------------------
     # Pass 1: Fast blank detection at low DPI
     # ------------------------------------------------------------------
-    print(f"\nPass 1: Rendering all pages at {BLANK_DPI} DPI for blank detection...")
+    print(paint(f"\n  {icon('broom')}  Pass 1: blank detection @ {BLANK_DPI} DPI", CYAN, BOLD))
     low_res_pages = convert_from_path(str(input_path), dpi=BLANK_DPI,
                                           grayscale=True, thread_count=os.cpu_count() or 4)
     total_pages = len(low_res_pages)
@@ -146,15 +152,21 @@ def process_pdf(input_path: str,
     del low_res_pages
 
     if not content_page_nums:
-        print("WARNING: All pages were removed (all blank?). Nothing to save.")
+        warn_line("All pages were removed (all blank?). Nothing to save.")
         sys.exit(1)
 
     # ------------------------------------------------------------------
     # Pass 2: Parallel OSD at full DPI (content pages only)
     # ------------------------------------------------------------------
     num_workers = min(os.cpu_count() or 4, len(content_page_nums))
-    print(f"\nPass 2: Running OSD on {len(content_page_nums)} content pages "
-          f"at {analysis_dpi} DPI ({num_workers} workers)...")
+    print(
+        paint(
+            f"\n  {icon('gear')}  Pass 2: OSD rotation on {len(content_page_nums)} pages "
+            f"@ {analysis_dpi} DPI ({num_workers} workers)",
+            CYAN,
+            BOLD,
+        )
+    )
 
     rotation_map: dict[int, int] = {}
     input_str = str(input_path)
@@ -171,7 +183,7 @@ def process_pdf(input_path: str,
     # ------------------------------------------------------------------
     # Print summary
     # ------------------------------------------------------------------
-    print(f"\nResults:")
+    print(paint(f"\n  {icon('chart')}  Rotation summary", CYAN, BOLD))
     for pn in sorted(rotation_map):
         angle = rotation_map[pn]
         status = f"rotate {angle}°" if angle != 0 else "ok"
@@ -199,14 +211,15 @@ def process_pdf(input_path: str,
 
         out_pdf.pages.append(src_page)
 
-    print(f"\nPages retained: {len(content_page_nums)}/{total_pages}")
-    print(f"Saving to: {output_path}")
+    note_line(f"Pages retained: {len(content_page_nums)}/{total_pages}")
+    note_line(f"Writing: {output_path}")
 
     out_pdf.save(str(output_path))
     out_pdf.close()
     src_pdf.close()
 
-    print("Done.\n")
+    ok_line("Passes 1–2 complete (rotate + de-blank).")
+    print()
 
 
 # ---------------------------------------------------------------------------
@@ -264,6 +277,9 @@ def main():
         from pipeline.scan_overlays import write_scan_debug_pdfs_after_deskew
 
         write_scan_debug_pdfs_after_deskew(out_p.parent, out_p, args.dpi)
+        from pipeline.terminal_ui import ok_line
+
+        ok_line("Deskew + projected overlay (if applicable) complete.")
 
 
 if __name__ == "__main__":

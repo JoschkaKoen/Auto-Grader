@@ -85,7 +85,11 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    print(f"[INFO] Using AI Model: {AI_MODEL}")
+    from pipeline.terminal_ui import BOLD, BLUE, icon, note_line, paint
+
+    print()
+    print(paint(f"  {icon('spark')}  extract_answers.py  —  Auto-Grader {__version__}", BLUE, BOLD))
+    note_line(f"AI model: {AI_MODEL}")
 
     pdf_path = Path(args.pdf)
     profile = get_profile()

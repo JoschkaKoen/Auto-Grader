@@ -290,17 +290,19 @@ def build_scaffold(folder: Path, client: Any | None = None, dpi: int = 200) -> E
     *dpi* is unused; parsing is vector-based.
     """
     _ = client, dpi
+    from pipeline.terminal_ui import tool_line
+
     if _is_cache_valid(folder):
         try:
-            print("[scaffold] Loading scaffold from cache …")
+            tool_line("scaffold", "Loading scaffold from cache …")
             return _load_cache(folder)
         except (ValueError, KeyError, TypeError, json.JSONDecodeError):
-            print("[scaffold] Cache incompatible or corrupt — rebuilding …")
+            tool_line("scaffold", "Cache incompatible or corrupt — rebuilding …")
 
     exam_pdf = _find_exam_pdf(folder)
     prepare_scaffold_image_dirs(folder)
 
-    print(f"[scaffold] Parsing exam PDF (vector): {exam_pdf.name} …")
+    tool_line("scaffold", f"Parsing exam PDF (vector): {exam_pdf.name} …")
     questions = parse_exam_pdf(exam_pdf, folder)
     if not questions:
         raise RuntimeError(
@@ -310,7 +312,7 @@ def build_scaffold(folder: Path, client: Any | None = None, dpi: int = 200) -> E
 
     ans = _find_answer_pdf(folder)
     if ans is not None:
-        print(f"[scaffold] Parsing answer key PDF (vector): {ans.name} …")
+        tool_line("scaffold", f"Parsing answer key PDF (vector): {ans.name} …")
         amap, table_answers, printed_mc = parse_answer_key_pdf(ans, folder)
         merge_answers_into_scaffold(
             questions,
@@ -319,7 +321,7 @@ def build_scaffold(folder: Path, client: Any | None = None, dpi: int = 200) -> E
             printed_mc_letters=printed_mc,
         )
     else:
-        print("[scaffold] No answer key PDF found — correct_answer left empty.")
+        tool_line("scaffold", "No answer key PDF found — correct_answer left empty.")
 
     for q in questions:
         normalize_multiple_choice_tree(q)
@@ -349,12 +351,13 @@ def build_scaffold(folder: Path, client: Any | None = None, dpi: int = 200) -> E
     )
     _save_cache(folder, scaffold)
     out_pdf, n_rects, n_pages = write_scaffold_boxes_pdf(exam_pdf, questions)
-    print(
-        f"[scaffold] Scaffold built: {len(questions)} top-level questions, "
-        f"{len(leaves)} gradable parts, {total_marks} total marks."
+    tool_line(
+        "scaffold",
+        f"Scaffold built: {len(questions)} top-level questions, "
+        f"{len(leaves)} gradable parts, {total_marks} total marks.",
     )
-    print(
-        f"[scaffold] Bounding-box overlay: {out_pdf.name} "
-        f"({n_rects} rectangles on {n_pages} page(s))."
+    tool_line(
+        "scaffold",
+        f"Bounding-box overlay: {out_pdf.name} ({n_rects} rectangles on {n_pages} page(s)).",
     )
     return scaffold

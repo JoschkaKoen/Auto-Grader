@@ -7,6 +7,7 @@ import statistics
 from extraction.reporting import Colors
 
 from pipeline.models import ExamScaffold, PageAssignment, StudentResult
+from pipeline.terminal_ui import icon, paint, rule, BOLD, CYAN
 
 
 # ---------------------------------------------------------------------------
@@ -30,20 +31,26 @@ def _pct_color(pct: float) -> str:
 # ---------------------------------------------------------------------------
 
 def print_scaffold_summary(scaffold: ExamScaffold) -> None:
-    print(f"\n{'═' * 60}")
+    print()
+    print(rule("═"))
     leaves = scaffold.gradable_questions
     print(
-        f"  EXAM SCAFFOLD  —  {len(scaffold.questions)} top-level, "
-        f"{len(leaves)} gradable parts, {scaffold.total_marks} total marks"
+        paint(
+            f"  {icon('gear')}  EXAM SCAFFOLD  —  {len(scaffold.questions)} top-level, "
+            f"{len(leaves)} gradable parts, {scaffold.total_marks} total marks",
+            CYAN,
+            BOLD,
+        )
     )
-    print(f"{'═' * 60}")
+    print(rule("═"))
     col_w = (55 - 10 - 20 - 8) // 2
     print(f"  {'#':<6} {'Type':<20} {'Marks':>5}  {'Answer':<15}")
     print(f"  {_bar(56)}")
     for q in leaves:
         ans = q.correct_answer or "–"
         print(f"  Q{q.number:<5} {q.question_type:<20} {q.marks:>5}  {ans:<15}")
-    print(f"{'═' * 60}\n")
+    print(rule("═"))
+    print()
 
 
 # ---------------------------------------------------------------------------
@@ -51,9 +58,16 @@ def print_scaffold_summary(scaffold: ExamScaffold) -> None:
 # ---------------------------------------------------------------------------
 
 def print_page_summary(page_map: list[PageAssignment], students: list[str]) -> None:
-    print(f"\n{'═' * 60}")
-    print(f"  PAGE ASSIGNMENT  —  {len(page_map)} student(s) identified")
-    print(f"{'═' * 60}")
+    print()
+    print(rule("═"))
+    print(
+        paint(
+            f"  {icon('users')}  PAGE ASSIGNMENT  —  {len(page_map)} student(s) identified",
+            CYAN,
+            BOLD,
+        )
+    )
+    print(rule("═"))
 
     found_names = {a.student_name for a in page_map}
 
@@ -72,7 +86,8 @@ def print_page_summary(page_map: list[PageAssignment], students: list[str]) -> N
         for name in not_found:
             print(f"    – {name}")
 
-    print(f"{'═' * 60}\n")
+    print(rule("═"))
+    print()
 
 
 # ---------------------------------------------------------------------------
@@ -80,13 +95,15 @@ def print_page_summary(page_map: list[PageAssignment], students: list[str]) -> N
 # ---------------------------------------------------------------------------
 
 def print_exercise_summary(exercise_map: dict[str, list[str]]) -> None:
-    print(f"\n{'═' * 60}")
-    print(f"  ANSWERED EXERCISES")
-    print(f"{'═' * 60}")
+    print()
+    print(rule("═"))
+    print(paint(f"  {icon('search')}  ANSWERED EXERCISES", CYAN, BOLD))
+    print(rule("═"))
     for name, questions in exercise_map.items():
         q_str = ", ".join(questions) if questions else "none"
         print(f"  {name:<20}  Q: {q_str}")
-    print(f"{'═' * 60}\n")
+    print(rule("═"))
+    print()
 
 
 # ---------------------------------------------------------------------------
@@ -103,9 +120,10 @@ def print_results_table(results: list[StudentResult], scaffold: ExamScaffold) ->
     col_w = 5  # per-question column width
 
     header_q = "".join(f"  Q{n:<{col_w}}" for n in q_nums)
-    print(f"\n{'═' * 60}")
-    print(f"  RESULTS TABLE")
-    print(f"{'═' * 60}")
+    print()
+    print(rule("═"))
+    print(paint(f"  {icon('chart')}  RESULTS TABLE", CYAN, BOLD))
+    print(rule("═"))
     print(f"  {'Student':<{max_name}}  {header_q}  {'Total':>7}  {'%':>6}")
     print(f"  {_bar(max_name + len(header_q) + 18)}")
 
@@ -121,7 +139,8 @@ def print_results_table(results: list[StudentResult], scaffold: ExamScaffold) ->
             f"{color}{r.total_marks:>6.1f}  {pct:>5.1f}%{Colors.RESET}"
         )
 
-    print(f"{'═' * 60}\n")
+    print(rule("═"))
+    print()
 
 
 # ---------------------------------------------------------------------------
@@ -137,9 +156,10 @@ def print_evaluation_summary(eval_data: dict, scaffold: ExamScaffold) -> None:
     )
     color = _pct_color(overall_pct)
 
-    print(f"\n{'═' * 60}")
-    print(f"  GROUND TRUTH EVALUATION")
-    print(f"{'═' * 60}")
+    print()
+    print(rule("═"))
+    print(paint(f"  {icon('chart')}  GROUND TRUTH EVALUATION", CYAN, BOLD))
+    print(rule("═"))
     print(f"  Overall accuracy: {color}{overall_str}{Colors.RESET}")
     print()
 
@@ -170,7 +190,8 @@ def print_evaluation_summary(eval_data: dict, scaffold: ExamScaffold) -> None:
             f"{acc_color}{row['correct']}/{row['total']} ({acc_pct:.0f}%){Colors.RESET}"
         )
 
-    print(f"{'═' * 60}\n")
+    print(rule("═"))
+    print()
 
 
 def print_grand_summary(results: list[StudentResult]) -> None:
@@ -190,11 +211,18 @@ def print_grand_summary(results: list[StudentResult]) -> None:
         color = _pct_color(pct)
         return f"{color}{val:.1f} ({pct:.0f}%){Colors.RESET}"
 
-    print(f"{'═' * 60}")
-    print(f"  CLASS STATISTICS  —  {len(results)} student(s) graded")
-    print(f"{'═' * 60}")
+    print(rule("═"))
+    print(
+        paint(
+            f"  {icon('chart')}  CLASS STATISTICS  —  {len(results)} student(s) graded",
+            CYAN,
+            BOLD,
+        )
+    )
+    print(rule("═"))
     print(f"  Mean:    {fmt(mean)}")
     print(f"  Median:  {fmt(median)}")
     print(f"  Highest: {fmt(hi)}")
     print(f"  Lowest:  {fmt(lo)}")
-    print(f"{'═' * 60}\n")
+    print(rule("═"))
+    print()

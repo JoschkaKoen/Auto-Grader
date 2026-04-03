@@ -484,8 +484,11 @@ def deskew_pdf_raster(
             "then Path.replace() if you need to update the original path."
         )
 
-    print(f"\n[deskew] Rendering {input_pdf.name} at {dpi} DPI …")
-    print("[deskew] Angle detection: full-resolution halves (no proxy downsample)")
+    from pipeline.terminal_ui import ok_line, tool_line
+
+    print()
+    tool_line("deskew", f"Rendering {input_pdf.name} at {dpi} DPI …")
+    tool_line("deskew", "Angle detection: full-resolution halves (no proxy downsample)")
     pages = convert_from_path(
         str(input_pdf),
         dpi=dpi,
@@ -493,7 +496,7 @@ def deskew_pdf_raster(
         thread_count=os.cpu_count() or 4,
     )
     n = len(pages)
-    print(f"[deskew] {n} pages loaded")
+    tool_line("deskew", f"{n} pages loaded")
 
     results: dict[int, _PageResult] = {}
 
@@ -506,21 +509,22 @@ def deskew_pdf_raster(
         for fut in as_completed(futures):
             page_idx, fixed_pil, top_angle, bot_angle, top_lines, bot_lines = fut.result()
             results[page_idx] = (fixed_pil, top_angle, bot_angle, top_lines, bot_lines)
-            print(
-                f"[deskew]   page {page_idx + 1:>3}/{n}"
-                f"  top={top_angle:+.2f}°  bot={bot_angle:+.2f}°"
+            tool_line(
+                "deskew",
+                f"  page {page_idx + 1:>3}/{n}"
+                f"  top={top_angle:+.2f}°  bot={bot_angle:+.2f}°",
             )
-            print(f"[deskew]     top lines: {_lines_str(top_lines)}")
-            print(f"[deskew]     bot lines: {_lines_str(bot_lines)}")
+            tool_line("deskew", f"    top lines: {_lines_str(top_lines)}")
+            tool_line("deskew", f"    bot lines: {_lines_str(bot_lines)}")
 
     # Bootstrap IGCSE template from page 0 top half (Tesseract, runs once)
-    print("[deskew] Extracting IGCSE template from page 1 …")
+    tool_line("deskew", "Extracting IGCSE template from page 1 …")
     page0_gray = np.array(results[0][0].convert("L"))
     p0_mid = page0_gray.shape[0] // 2
     igcse_template = extract_igcse_template(page0_gray[:p0_mid, :])
 
     # Detect IGCSE anchors on all pages (fast template matching, serial)
-    print("[deskew] Detecting IGCSE anchors …")
+    tool_line("deskew", "Detecting IGCSE anchors …")
     page_anchors: dict[int, dict[str, AnchorPoint | None]] = {}
     for i in range(n):
         page_gray = np.array(results[i][0].convert("L"))
@@ -528,9 +532,10 @@ def deskew_pdf_raster(
         tl, tr = detect_igcse_anchors(page_gray[:p_mid, :], igcse_template)
         bl, br = detect_igcse_anchors(page_gray[p_mid:, :], igcse_template)
         page_anchors[i] = {"top_left": tl, "top_right": tr, "bot_left": bl, "bot_right": br}
-        print(
-            f"[deskew]   page {i + 1:>3} anchors:"
-            f"  TL={tl}  TR={tr}  BL={bl}  BR={br}"
+        tool_line(
+            "deskew",
+            f"  page {i + 1:>3} anchors:"
+            f"  TL={tl}  TR={tr}  BL={bl}  BR={br}",
         )
 
     # Build sidecar JSON (ordered by page index)
@@ -559,7 +564,7 @@ def deskew_pdf_raster(
         else output_pdf.with_name(output_pdf.stem + "_reflines.json").resolve()
     )
     sidecar_path.write_text(json.dumps(reflines_data, indent=2))
-    print(f"[deskew] Reference lines → {sidecar_path.name}")
+    tool_line("deskew", f"Reference lines → {sidecar_path.name}")
 
     doc = fitz.open()
     for i in range(n):
@@ -577,7 +582,7 @@ def deskew_pdf_raster(
     doc.save(str(output_pdf), deflate=True)
     doc.close()
 
-    print(f"[deskew] Saved → {output_pdf}")
+    ok_line(f"Deskew saved → {output_pdf.name}")
     return output_pdf
 
 

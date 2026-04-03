@@ -54,7 +54,8 @@ class _Tee:
         self._log.flush()
 
     def isatty(self) -> bool:
-        return False
+        # Delegate so ANSI colors still apply to the real terminal when teeing to a log.
+        return self._stdout.isatty()
 
     def close(self) -> None:
         sys.stdout = self._stdout
@@ -140,7 +141,11 @@ def main() -> None:
     log_path = Path("logs") / f"{timestamp}.log"
     tee = _Tee(log_path)
     sys.stdout = tee
-    print(f"[grade] Log: {log_path}")
+    from pipeline.terminal_ui import BOLD, BLUE, icon, note_line, paint
+
+    print()
+    print(paint(f"  {icon('spark')}  grade.py  —  Auto-Grader {__version__}", BLUE, BOLD))
+    note_line(f"Log file: {log_path}")
 
     try:
         _run(args, timestamp)
@@ -152,6 +157,15 @@ def main() -> None:
 def _run(args: argparse.Namespace, timestamp: str) -> None:
     # Late imports after dotenv so env vars are available
     from extraction.providers.kimi import KimiProvider
+
+    from pipeline.terminal_ui import (
+        err_line,
+        info_line,
+        note_line,
+        ok_line,
+        pipeline_step,
+        warn_line,
+    )
 
     from pipeline.answer_detection import detect_answered_exercises
     from pipeline.folder_discovery import find_folder
@@ -177,95 +191,100 @@ def _run(args: argparse.Namespace, timestamp: str) -> None:
     # ------------------------------------------------------------------ #
     client = KimiProvider.create_client()
     if client is None:
-        print(
-            "ERROR: Could not create Kimi API client.\n"
-            "Set KIMI_API_KEY in your .env file or environment.",
-            file=sys.stderr,
-        )
+        err_line("Could not create Kimi API client.")
+        err_line("Set KIMI_API_KEY in your .env file or environment.")
         raise SystemExit(1)
+
+    ok_line("Kimi API client ready.")
 
     # ------------------------------------------------------------------ #
     # Step 2: Parse natural language prompt                               #
     # ------------------------------------------------------------------ #
-    print(f"\n[grade] Parsing prompt: {args.prompt!r}")
+    pipeline_step(1, "Parse natural language prompt")
+    info_line(f"Prompt: {args.prompt!r}")
     instruction = parse_prompt(args.prompt, client=client, dpi_override=args.dpi)
-    print(
-        f"[grade] Task: {instruction.task_type}  |  "
+    note_line(
+        f"Task: {instruction.task_type}  |  "
         f"Students: {instruction.student_filter.mode}  |  "
         f"DPI: {instruction.dpi}"
     )
     if args.through_step == 1:
-        print("\n[grade] --through-step 1: stopping after parse prompt (README table).")
+        info_line("--through-step 1: stopping after parse prompt (README table).")
         raise SystemExit(0)
 
     # ------------------------------------------------------------------ #
     # Step 3: Find exam folder                                            #
     # ------------------------------------------------------------------ #
+    pipeline_step(2, "Find exam folder")
     folder = find_folder(
         instruction_hint=instruction.folder_hint,
         cli_override=args.folder,
     )
-    print(f"[grade] Exam folder: {folder}")
+    note_line(f"{folder}")
 
     stem = folder.name.replace(" ", "_")
     run_dir = Path(args.output_dir) / f"{timestamp}_{stem}"
     run_dir.mkdir(parents=True, exist_ok=True)
-    print(f"[grade] Run output:  {run_dir}")
+    note_line(f"Run output directory: {run_dir}")
     if args.through_step == 2:
-        print("\n[grade] --through-step 2: stopping after find exam folder (README table).")
+        info_line("--through-step 2: stopping after find exam folder (README table).")
         raise SystemExit(0)
 
     # ------------------------------------------------------------------ #
     # Step 4: Read student list                                           #
     # ------------------------------------------------------------------ #
+    pipeline_step(3, "Load roster")
     students = read_student_list(folder)
-    print(f"[grade] Roster: {len(students)} students — {', '.join(students[:5])}" +
-          (" …" if len(students) > 5 else ""))
+    roster_preview = ", ".join(students[:5]) + (" …" if len(students) > 5 else "")
+    note_line(f"{len(students)} students — {roster_preview}")
     if args.through_step == 3:
-        print("\n[grade] --through-step 3: stopping after load roster (README table).")
+        info_line("--through-step 3: stopping after load roster (README table).")
         raise SystemExit(0)
 
     # ------------------------------------------------------------------ #
     # Step 5: Build exam scaffold                                         #
     # ------------------------------------------------------------------ #
+    pipeline_step(4, "Build exam scaffold")
     if args.rescaffold:
         cache_p = folder / "scaffolds" / "scaffold_cache.json"
         if cache_p.is_file():
             cache_p.unlink()
-            print(f"[grade] --rescaffold: removed {cache_p}")
+            warn_line(f"--rescaffold: removed {cache_p}")
 
     scaffold = build_scaffold(folder, client=client)
     print_scaffold_summary(scaffold)
     if args.through_step == 4:
-        print("\n[grade] --through-step 4: stopping after build scaffold (README table).")
+        info_line("--through-step 4: stopping after build scaffold (README table).")
         raise SystemExit(0)
 
     # ------------------------------------------------------------------ #
     # Step 6: Clean scan PDF                                              #
     # ------------------------------------------------------------------ #
+    pipeline_step(5, "Clean scan PDF")
     if args.no_cleanup:
         # Use pre-existing cleaned_scan.pdf or raw scan
         existing = folder / "cleaned_scan.pdf"
         if existing.exists():
             cleaned_pdf = existing
-            print(f"[grade] --no-cleanup: using {cleaned_pdf}")
+            info_line(f"--no-cleanup: using {cleaned_pdf.name}")
         else:
             scans = list(folder.glob("*.pdf"))
             scans = [f for f in scans if "scan" in f.name.lower()]
             if not scans:
-                print("ERROR: --no-cleanup set but no scan PDF found.", file=sys.stderr)
+                err_line("--no-cleanup set but no scan PDF found.")
                 raise SystemExit(1)
             cleaned_pdf = scans[0]
-            print(f"[grade] --no-cleanup: using {cleaned_pdf}")
+            info_line(f"--no-cleanup: using {cleaned_pdf.name}")
     else:
         cleaned_pdf = cleanup_pdf(folder, dpi=instruction.dpi, reclean=args.reclean)
     if args.through_step == 5:
-        print("\n[grade] --through-step 5: stopping after clean scan (README table).")
+        info_line("--through-step 5: stopping after clean scan (README table).")
         raise SystemExit(0)
 
     # ------------------------------------------------------------------ #
     # Step 7: Page assignment                                             #
     # ------------------------------------------------------------------ #
+    pipeline_step(6, "Assign pages to students")
     from config import NAME_CROP_FRACTION, NAME_RECOGNITION_DPI
 
     page_map = assign_pages(
@@ -278,66 +297,69 @@ def _run(args: argparse.Namespace, timestamp: str) -> None:
     print_page_summary(page_map, students)
     if args.through_step == 6:
         proj = cleaned_pdf.with_name(f"{cleaned_pdf.stem}_projected_boxes.pdf")
-        print(
-            f"\n[grade] --through-step 6: stopping after assign pages (README table).\n"
-            f"        Scan with projected scaffold bboxes (if generated): {proj}"
-        )
+        info_line("--through-step 6: stopping after assign pages (README table).")
+        note_line(f"Projected scaffold overlay (if generated): {proj}")
         raise SystemExit(0)
 
     if not page_map:
-        print("WARNING: No student pages identified. Cannot grade.", file=sys.stderr)
+        warn_line("No student pages identified. Cannot grade.")
         raise SystemExit(0)
 
     # ------------------------------------------------------------------ #
     # Step 8: Exercise detection                                          #
     # ------------------------------------------------------------------ #
+    pipeline_step(7, "Detect answered exercises")
     exercise_map = detect_answered_exercises(
         cleaned_pdf, page_map, scaffold,
         dpi=NAME_RECOGNITION_DPI, client=client,
     )
     print_exercise_summary(exercise_map)
     if args.through_step == 7:
-        print("\n[grade] --through-step 7: stopping after exercise detection (README table).")
+        info_line("--through-step 7: stopping after exercise detection (README table).")
         raise SystemExit(0)
 
     # ------------------------------------------------------------------ #
     # Step 9: Grade                                                       #
     # ------------------------------------------------------------------ #
+    pipeline_step(8, "Grade submissions")
     results = grade_students(
         cleaned_pdf, page_map, exercise_map, scaffold, instruction, client=client,
     )
+    pipeline_step(9, "Print results")
     print_results_table(results, scaffold)
     print_grand_summary(results)
     if args.through_step in (8, 9):
-        print(
-            f"\n[grade] --through-step {args.through_step}: stopping after grade / results (README table)."
+        info_line(
+            f"--through-step {args.through_step}: stopping after grade / results (README table)."
         )
         raise SystemExit(0)
 
     # ------------------------------------------------------------------ #
     # Step 10: Ground truth evaluation (if file exists in exam folder)   #
     # ------------------------------------------------------------------ #
+    pipeline_step(10, "Ground truth evaluation")
     eval_data: dict | None = None
     gt_file = find_ground_truth_file(folder)
     if gt_file is not None:
-        print(f"[grade] Ground truth file found: {gt_file.name}")
+        note_line(f"Ground truth file: {gt_file.name}")
         gt = load_ground_truth(folder, scaffold)
         if gt:
             eval_data = evaluate_results(results, gt, scaffold)
             print_evaluation_summary(eval_data, scaffold)
         else:
-            print("[grade] Ground truth file could not be parsed — skipping evaluation.")
+            warn_line("Ground truth file could not be parsed — skipping evaluation.")
     else:
-        print("[grade] No ground truth file found — skipping evaluation.")
-        print("        (To enable, add a ground_truth.txt file to the exam folder.)")
+        info_line("No ground truth file in folder — skipping evaluation.")
+        info_line("(Add ground_truth.txt to the exam folder to enable.)")
 
     if args.through_step == 10:
-        print("\n[grade] --through-step 10: stopping after ground-truth step (README table).")
+        info_line("--through-step 10: stopping after ground-truth step (README table).")
         raise SystemExit(0)
 
     # ------------------------------------------------------------------ #
     # Step 11: PDF report                                                 #
     # ------------------------------------------------------------------ #
+    pipeline_step(11, "Generate report")
     if not args.no_report:
         output_tex = run_dir / "grade_report.tex"
         output_pdf = run_dir / "grade_report.pdf"
@@ -350,9 +372,14 @@ def _run(args: argparse.Namespace, timestamp: str) -> None:
             eval_data=eval_data,
             title=title,
         )
+        ok_line(f"Report: {output_pdf}")
+    else:
+        info_line("--no-report: skipping LaTeX/PDF.")
     if args.through_step == 11:
-        print("\n[grade] --through-step 11: full pipeline complete (README table).")
+        ok_line("--through-step 11: full pipeline complete (README table).")
         raise SystemExit(0)
+
+    ok_line("Grading pipeline finished.")
 
 
 if __name__ == "__main__":

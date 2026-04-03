@@ -48,20 +48,22 @@ def cleanup_pdf(
         sorted(scans, key=lambda p: p.name.lower())[0],
     )
 
+    from pipeline.terminal_ui import ok_line, tool_line
+
     if reclean:
         if output.exists():
             output.unlink()
-            print(f"[pdf_cleanup] --reclean: removed {output.name}")
+            tool_line("pdf_cleanup", f"--reclean: removed {output.name}")
         sidecar = output.with_name(f"{output.stem}_reflines.json")
         if sidecar.exists():
             sidecar.unlink()
-            print(f"[pdf_cleanup] --reclean: removed {sidecar.name}")
+            tool_line("pdf_cleanup", f"--reclean: removed {sidecar.name}")
 
     if not reclean and output.exists() and output.stat().st_mtime >= match.stat().st_mtime:
-        print(f"[pdf_cleanup] Using cached cleaned scan: {output}")
+        tool_line("pdf_cleanup", f"Using cached cleaned scan: {output.name}")
         return output
 
-    print(f"[pdf_cleanup] Cleaning {match.name} → {output.name} (DPI {dpi}) …")
+    tool_line("pdf_cleanup", f"Cleaning {match.name} → {output.name} (DPI {dpi}) …")
     process_pdf(
         input_path=str(match),
         output_path=str(output),

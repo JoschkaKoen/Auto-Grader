@@ -47,6 +47,8 @@ def _to_jpeg_b64(img) -> str:
 
 
 def _call_kimi(client: Any, image_b64: str) -> str:
+    from pipeline.terminal_ui import warn_line
+
     model = os.getenv("PIPELINE_AI_MODEL") or "kimi-k2.5"
     is_k2_5 = model.startswith("kimi-k2")
     extra: dict = {}
@@ -70,7 +72,7 @@ def _call_kimi(client: Any, image_b64: str) -> str:
             )
             return resp.choices[0].message.content or ""
         except Exception as exc:
-            print(f"  [page_assignment] API error (attempt {attempt}/3): {exc}")
+            warn_line(f"[page_assignment] API error (attempt {attempt}/3): {exc}")
             if attempt < 3:
                 time.sleep(2 ** attempt)
     return ""
@@ -96,7 +98,9 @@ def assign_pages(
     if client is None:
         raise RuntimeError("No Kimi client available for page assignment.")
 
-    print(f"[page_assignment] Rendering {cleaned_pdf.name} at {dpi} DPI …")
+    from pipeline.terminal_ui import info_line, tool_line
+
+    tool_line("page_assignment", f"Rendering {cleaned_pdf.name} at {dpi} DPI …")
     pages = convert_from_path(str(cleaned_pdf), dpi=dpi, thread_count=os.cpu_count() or 4)
 
     # For each page: ask Kimi for the student name (or empty string)
@@ -109,7 +113,7 @@ def assign_pages(
             name = json.loads(raw).get("name", "").strip()
         except (json.JSONDecodeError, AttributeError):
             name = ""
-        print(f"  Page {i:3d}/{len(pages)}: raw name = {name!r}")
+        info_line(f"Page {i:3d}/{len(pages)}: raw name = {name!r}")
         raw_names.append(name)
         time.sleep(0.2)  # light rate-limit
 
