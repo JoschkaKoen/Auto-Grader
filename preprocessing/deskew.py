@@ -575,11 +575,11 @@ def deskew_pdf_raster(
         Progress,
         TaskProgressColumn,
         TextColumn,
-        TimeElapsedColumn,
     )
 
     from shared.terminal_ui import (
         PROGRESS_TASK_TEXT,
+        ElapsedSecondsColumn,
         format_duration,
         get_console,
         info_line,
@@ -642,9 +642,11 @@ def deskew_pdf_raster(
                 TextColumn(PROGRESS_TASK_TEXT),
                 BarColumn(bar_width=28),
                 TaskProgressColumn(),
-                TimeElapsedColumn(),
+                TextColumn("  ", style="dim"),
+                ElapsedSecondsColumn(),
                 console=c,
                 transient=False,
+                padding=(0, 0),
             ) as prog:
                 task_id = prog.add_task("", total=n)
                 for fut in as_completed(futures):

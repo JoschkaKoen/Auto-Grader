@@ -24,7 +24,6 @@ from rich.progress import (
     SpinnerColumn,
     TaskProgressColumn,
     TextColumn,
-    TimeElapsedColumn,
 )
 from rich.table import Table
 
@@ -75,24 +74,31 @@ def _rotation_worker(args: tuple[int, Image.Image]) -> tuple[int, int]:
 
 def _raster_with_spinner(label: str, fn, *, console) -> list:
     """Run *fn()* in a background thread, show a spinner, return the result."""
-    from shared.terminal_ui import format_duration, ok_line
+    from shared.terminal_ui import (
+        ElapsedSecondsColumn,
+        format_elapsed_live,
+        ok_line,
+    )
 
     t0 = time.perf_counter()
     with ThreadPoolExecutor(max_workers=1) as ex:
         future = ex.submit(fn)
+        # Same left margin as info_line / tool_line: ``  `` + indicator + ``  `` + text
         with Progress(
             TextColumn("  "),
-            SpinnerColumn(),
-            TextColumn("  {task.description}"),
-            TimeElapsedColumn(),
+            SpinnerColumn(style="dim"),
+            TextColumn("  {task.description}", style="dim"),
+            TextColumn("  ", style="dim"),
+            ElapsedSecondsColumn(),
             console=console,
             transient=True,
+            padding=(0, 0),
         ) as prog:
             prog.add_task(label, total=None)
             while not future.done():
                 time.sleep(0.05)
     result = future.result()
-    ok_line(f"{label} · {format_duration(time.perf_counter() - t0)}")
+    ok_line(f"{label} · {format_elapsed_live(time.perf_counter() - t0)}")
     return result
 
 
@@ -116,6 +122,7 @@ def process_pdf(
 
     from shared.terminal_ui import (
         PROGRESS_TASK_TEXT,
+        ElapsedSecondsColumn,
         err_line,
         get_console,
         icon,
@@ -227,9 +234,11 @@ def process_pdf(
             TextColumn(PROGRESS_TASK_TEXT),
             BarColumn(bar_width=28),
             TaskProgressColumn(),
-            TimeElapsedColumn(),
+            TextColumn("  ", style="dim"),
+            ElapsedSecondsColumn(),
             console=c,
             transient=False,
+            padding=(0, 0),
         ) as prog:
             task_id = prog.add_task("", total=len(futures))
             for future in as_completed(futures):

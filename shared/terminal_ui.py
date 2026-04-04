@@ -10,7 +10,9 @@ import os
 import sys
 
 from rich.console import Console
+from rich.progress import ProgressColumn
 from rich.rule import Rule
+from rich.text import Text
 
 # Legacy ANSI constants (some callers still pass these to :func:`paint`)
 RESET = "\033[0m"
@@ -111,6 +113,25 @@ def rule(char: str = "═", width: int = 60) -> str:
 # Rich ``TextColumn`` template: aligns task labels with :func:`info_line` / :func:`tool_line`
 # (they print ``  {icon}  {text}`` — two spaces + one-column icon + two spaces).
 PROGRESS_TASK_TEXT = "     {task.description}"
+
+
+def format_elapsed_live(seconds: float) -> str:
+    """Elapsed time for Rich progress columns: seconds only (no ``M:SS`` or hours)."""
+    if seconds < 0:
+        seconds = 0.0
+    if seconds < 60:
+        return f"{seconds:.1f}s"
+    return f"{int(round(seconds))}s"
+
+
+class ElapsedSecondsColumn(ProgressColumn):
+    """Rich progress column: live elapsed as ``3.2s`` or ``128s``."""
+
+    def render(self, task: object) -> Text:
+        elapsed = getattr(task, "elapsed", None)
+        if elapsed is None:
+            elapsed = 0.0
+        return Text(format_elapsed_live(float(elapsed)), style="progress.elapsed")
 
 
 def format_duration(seconds: float) -> str:
