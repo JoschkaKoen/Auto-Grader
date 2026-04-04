@@ -682,7 +682,9 @@ def deskew_pdf_raster(
             )
 
     if not verbose:
-        ok_line(f"Headers and margins · {format_duration(time.perf_counter() - t_hdr)}")
+        ok_line(
+            f"Found headers and margins · {format_duration(time.perf_counter() - t_hdr)}"
+        )
 
     # Build sidecar JSON (ordered by page index)
     def _anc_dict(a: AnchorPoint | None) -> dict | None:
