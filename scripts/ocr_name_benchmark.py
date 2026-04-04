@@ -5,8 +5,9 @@ Compare Tesseract, EasyOCR, and PaddleOCR on the same name strip from a cleaned 
 Uses a fixed PDF-point crop (default 0,0 → 840,125 pt), not the production Kimi top-15% crop.
 Match scores use ``fuzzy_match_name`` (same helper as grading).
 
-Optional stacks (EasyOCR / Paddle): install via ``bash scripts/install_paddleocr.sh``,
-then ``source paddle_env/bin/activate`` and run this script from that environment.
+Optional stacks (EasyOCR / Paddle): ``bash scripts/install_paddleocr.sh`` (or
+``bash scripts/install_paddle_benchmark_deps.sh`` if ``paddle_env`` exists but lacks
+Rich/OpenCV/etc.), then ``source paddle_env/bin/activate`` and run this script.
 
 System: ``brew install tesseract`` (see main README).
 

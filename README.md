@@ -31,7 +31,7 @@ Install system dependencies:
 Not required for normal `xscore.py` use. Installs large ML dependencies (Paddle + PyTorch and models). If `easyocr` fails to install PyTorch, see [PyTorch install](https://pytorch.org/get-started/locally/) for a CPU wheel, then run `pip install easyocr` again inside `paddle_env`.
 
 **Optional — OCR name benchmark (dev / comparison)**  
-From the repo root (so `output/<exam>/…` resolves). Either use **`.venv`** after `pip install -r requirements.txt`, or **`paddle_env`** after `bash scripts/install_paddleocr.sh` (the install script also pulls `rich`, `pymupdf`, `pytesseract`, `openpyxl` for this script). If an older `paddle_env` misses those: `pip install rich pymupdf pytesseract openpyxl`.
+From the repo root (so `output/<exam>/…` resolves). Either use **`.venv`** after `pip install -r requirements.txt`, or **`paddle_env`** for EasyOCR/Paddle. For `paddle_env`, run **`bash scripts/install_paddleocr.sh`** (includes benchmark deps), or if the venv already exists without them: **`bash scripts/install_paddle_benchmark_deps.sh`**.
 
 `python3 scripts/ocr_name_benchmark.py --folder "path/to/exam"`
 

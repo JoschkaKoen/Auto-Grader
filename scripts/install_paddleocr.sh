@@ -63,8 +63,25 @@ echo "--- Step B: paddleocr (PyPI) ---"
 echo "--- Step C: easyocr (PyPI; pulls PyTorch — large download) ---"
 "${PY}" -m pip install easyocr
 
-echo "--- Step D: scripts/ocr_name_benchmark.py (Rich, PyMuPDF, Tesseract bindings, roster xlsx) ---"
-"${PY}" -m pip install rich pymupdf pytesseract openpyxl
+echo "--- Step D: scripts/ocr_name_benchmark.py (Rich, PyMuPDF, OpenCV, Tesseract, roster xlsx) ---"
+"${PY}" -m pip install \
+  "rich>=13.7.0" \
+  "pymupdf>=1.24.0" \
+  "pytesseract>=0.3.13" \
+  "openpyxl>=3.1.0" \
+  "opencv-python-headless>=4.9.0" \
+  "Pillow>=10.0.0"
+
+echo "--- Checking ocr_name_benchmark imports ---"
+"${PY}" - <<'PY'
+import rich
+import cv2
+import fitz  # pymupdf
+import openpyxl
+import pytesseract
+from PIL import Image
+print("ocr_name_benchmark dependencies OK")
+PY
 
 echo ""
 echo "--- Verifying (first run may download model weights — large, normal) ---"
