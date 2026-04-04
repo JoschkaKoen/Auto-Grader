@@ -205,7 +205,7 @@ def _run(args: argparse.Namespace, timestamp: str) -> None:
     # Step 1: Parse natural language prompt                               #
     # ------------------------------------------------------------------ #
     pipeline_step(1, "Your request")
-    info_line("Parsing …")
+    info_line("Parsing prompt …")
     _t_parse = time.perf_counter()
     instruction = parse_prompt(args.prompt, client=client, dpi_override=args.dpi)
     _parse_elapsed = time.perf_counter() - _t_parse
