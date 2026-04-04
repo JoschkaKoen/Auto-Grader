@@ -55,7 +55,7 @@ echo "--- Upgrading pip ---"
 
 # Bump version when Paddle docs change: https://www.paddlepaddle.org.cn/
 echo "--- Step A: PaddlePaddle (official CPU index) ---"
-"${PY}" -m pip install paddlepaddle==3.3.0 -i https://www.paddlepaddle.org.cn/packages/stable/cpu/
+"${PY}" -m pip install paddlepaddle==3.3.1 -i https://www.paddlepaddle.org.cn/packages/stable/cpu/
 
 echo "--- Step B: paddleocr (PyPI) ---"
 "${PY}" -m pip install paddleocr
