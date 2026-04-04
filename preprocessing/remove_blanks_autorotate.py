@@ -30,10 +30,10 @@ from rich.table import Table
 # Configuration defaults
 # ---------------------------------------------------------------------------
 
-# Default when process_pdf is called without analysis_dpi (standalone / tests).
-# Pipeline callers (start_scan) must pass pipeline dpi: at ~150 DPI, orientation_conf
-# often stays below detect_rotation's 2.0 threshold and 90°/270° fixes are skipped.
+# Default OSD raster DPI when process_pdf is called without analysis_dpi (standalone / tests).
+# Pipeline callers must pass pipeline dpi: low DPI yields orientation_conf < 2.0 and skipped rotation.
 ANALYSIS_DPI = 150
+BLANK_DPI = 72  # Fast blank-page pass (mean/std); OSD uses *analysis_dpi* in a second render.
 BLANK_MEAN_THRESHOLD = 250  # Pages with grayscale mean above this are considered blank (0-255)
 BLANK_STD_THRESHOLD = 6     # Pages with grayscale std below this are considered blank
 
@@ -82,9 +82,9 @@ def process_pdf(
 ) -> None:
     """Blank detection + OSD rotation; write lossless PDF to *output_path*.
 
-    One Poppler rasterization at *analysis_dpi* (default :data:`ANALYSIS_DPI` for standalone
-    calls; :mod:`preprocessing.start_scan` passes pipeline *dpi*) feeds blank classification
-    and per-page orientation; parallel workers only run Tesseract.
+    Two Poppler passes: all pages at :data:`BLANK_DPI` for blanks, then all pages at
+    *analysis_dpi* (pipeline DPI from :mod:`preprocessing.start_scan`) for Tesseract OSD.
+    Parallel workers only run Tesseract on content pages; no per-page Poppler launches.
     """
     input_path = Path(input_path)
     output_path = Path(output_path)
@@ -121,27 +121,29 @@ def process_pdf(
             )
         )
         note_line(
-            f"Analysis DPI: {analysis_dpi}  |  Blank: mean≥{blank_mean}, std≤{blank_std}"
+            f"Blank pass @ {BLANK_DPI} DPI  |  OSD pass @ {analysis_dpi} DPI  |  "
+            f"Blank: mean≥{blank_mean}, std≤{blank_std}"
         )
 
+    _tc = os.cpu_count() or 4
     if verbose:
         c.print(
-            f"\n[bold cyan]  {icon('broom')}  Raster @ {analysis_dpi} DPI: blanks + page rotation[/]"
+            f"\n[bold cyan]  {icon('broom')}  Pass 1: blank detection @ {BLANK_DPI} DPI[/]"
         )
-    pages_rendered = convert_from_path(
+    low_res_pages = convert_from_path(
         str(input_path),
-        dpi=analysis_dpi,
+        dpi=BLANK_DPI,
         grayscale=True,
-        thread_count=os.cpu_count() or 4,
+        thread_count=_tc,
     )
-    total_pages = len(pages_rendered)
+    total_pages = len(low_res_pages)
     if verbose:
         c.print(f"  Total pages: {total_pages}")
 
     content_page_nums: list[int] = []
     blank_page_nums: list[int] = []
 
-    for i, page_img in enumerate(pages_rendered):
+    for i, page_img in enumerate(low_res_pages):
         page_num = i + 1
         if is_blank_page(page_img, blank_mean, blank_std):
             blank_page_nums.append(page_num)
@@ -153,20 +155,32 @@ def process_pdf(
             f"  → {len(blank_page_nums)} blank pages, {len(content_page_nums)} content pages"
         )
 
+    del low_res_pages
+
     if not content_page_nums:
-        del pages_rendered
         warn_line("All pages were removed (all blank?). Nothing to save.")
         sys.exit(1)
 
-    num_workers = min(os.cpu_count() or 4, len(content_page_nums))
     if verbose:
         c.print(
-            f"\n[bold cyan]  {icon('gear')}  Tesseract OSD on {len(content_page_nums)} pages "
-            f"({num_workers} workers)[/]"
+            f"\n[bold cyan]  {icon('gear')}  Pass 2: raster @ {analysis_dpi} DPI for OSD[/]"
+        )
+    hi_res_pages = convert_from_path(
+        str(input_path),
+        dpi=analysis_dpi,
+        grayscale=True,
+        thread_count=_tc,
+    )
+
+    num_workers = min(_tc, len(content_page_nums))
+    if verbose:
+        c.print(
+            f"  Tesseract OSD on {len(content_page_nums)} content pages "
+            f"({num_workers} workers)"
         )
 
     rotation_map: dict[int, int] = {}
-    osd_inputs = [(pn, pages_rendered[pn - 1]) for pn in content_page_nums]
+    osd_inputs = [(pn, hi_res_pages[pn - 1]) for pn in content_page_nums]
 
     with ThreadPoolExecutor(max_workers=num_workers) as executor:
         futures = {
@@ -186,7 +200,7 @@ def process_pdf(
                 rotation_map[page_num] = angle
                 prog.advance(task_id)
 
-    del pages_rendered
+    del hi_res_pages
 
     if verbose:
         rot_table = Table(
