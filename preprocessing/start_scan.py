@@ -105,10 +105,11 @@ def cleanup_pdf(
         return output
 
     tool_line("start_scan", "Detect empty pages and page rotation …")
-    # OSD + blank detection use ANALYSIS_DPI only; deskew below uses *dpi*.
+    # Same *dpi* as deskew: Tesseract OSD needs enough resolution for orientation_conf ≥ 2.0.
     process_pdf(
         input_path=str(match),
         output_path=str(output),
+        analysis_dpi=dpi,
         verbose=False,
     )
 

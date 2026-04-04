@@ -30,7 +30,9 @@ from rich.table import Table
 # Configuration defaults
 # ---------------------------------------------------------------------------
 
-# Single raster pass at this DPI: blank detection + Tesseract OSD (90°). Deskew uses pipeline DPI later.
+# Default when process_pdf is called without analysis_dpi (standalone / tests).
+# Pipeline callers (start_scan) must pass pipeline dpi: at ~150 DPI, orientation_conf
+# often stays below detect_rotation's 2.0 threshold and 90°/270° fixes are skipped.
 ANALYSIS_DPI = 150
 BLANK_MEAN_THRESHOLD = 250  # Pages with grayscale mean above this are considered blank (0-255)
 BLANK_STD_THRESHOLD = 6     # Pages with grayscale std below this are considered blank
@@ -80,8 +82,9 @@ def process_pdf(
 ) -> None:
     """Blank detection + OSD rotation; write lossless PDF to *output_path*.
 
-    One Poppler rasterization at *analysis_dpi* (default :data:`ANALYSIS_DPI`) feeds both
-    blank classification and per-page orientation; parallel workers only run Tesseract.
+    One Poppler rasterization at *analysis_dpi* (default :data:`ANALYSIS_DPI` for standalone
+    calls; :mod:`preprocessing.start_scan` passes pipeline *dpi*) feeds blank classification
+    and per-page orientation; parallel workers only run Tesseract.
     """
     input_path = Path(input_path)
     output_path = Path(output_path)
