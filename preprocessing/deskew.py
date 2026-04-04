@@ -20,6 +20,7 @@ from __future__ import annotations
 import io
 import json
 import os
+from contextlib import nullcontext
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -569,32 +570,52 @@ def deskew_pdf_raster(
             "then Path.replace() if you need to update the original path."
         )
 
-    from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn
+    from rich.progress import (
+        BarColumn,
+        Progress,
+        SpinnerColumn,
+        TaskProgressColumn,
+        TextColumn,
+        TimeElapsedColumn,
+    )
+    from rich.rule import Rule
 
-    from shared.terminal_ui import get_console, note_line, ok_line, progress_line, tool_line
+    from shared.terminal_ui import get_console, note_line, ok_line, tool_line
+
+    c = get_console()
+    _pdf_kw = dict(
+        dpi=dpi,
+        grayscale=True,
+        thread_count=os.cpu_count() or 4,
+    )
 
     if verbose:
-        get_console().print()
+        c.print()
         tool_line("deskew", f"Rendering {input_pdf.name} at {dpi} DPI …")
         tool_line(
             "deskew",
             "Angle detection: coarse 0.1° on ¼-scale proxy, fine 0.01° at full resolution",
         )
+        pages = convert_from_path(str(input_pdf), **_pdf_kw)
     else:
-        progress_line(
-            "Deskew: rasterize PDF → angular deskew per half → vertical ref-lines on deskewed "
-            "halves → IGCSE anchors → write PDF (slow) …",
+        c.print()
+        c.print(
+            Rule(
+                title=f"[bold cyan]Deskew[/]  [dim]{input_pdf.name}  @ {dpi} DPI[/]",
+                style="dim cyan",
+            )
         )
-    pages = convert_from_path(
-        str(input_pdf),
-        dpi=dpi,
-        grayscale=True,
-        thread_count=os.cpu_count() or 4,
-    )
+        with c.status(
+            "[bold cyan]1/4[/]  Rasterizing PDF to images (can take a while)…",
+            spinner="dots",
+        ):
+            pages = convert_from_path(str(input_pdf), **_pdf_kw)
     n = len(pages)
     num_workers = min(os.cpu_count() or 4, n)
     if verbose:
         tool_line("deskew", f"{n} pages loaded")
+    else:
+        c.print(f"  [dim]→ {n} pages rasterized[/]")
 
     results: dict[int, _PageResult] = {}
 
@@ -620,45 +641,57 @@ def deskew_pdf_raster(
                 tool_line("deskew", f"    ref-lines (after deskew)  top: {_lines_str(top_lines)}")
                 tool_line("deskew", f"    ref-lines (after deskew)  bot: {_lines_str(bot_lines)}")
         else:
-            progress_line(
-                "Angular deskew + vertical ref-lines (per page, parallel) …",
-            )
             with Progress(
-                TextColumn("[cyan]{task.description}"),
-                BarColumn(),
+                SpinnerColumn("dots"),
+                TextColumn("[bold cyan]2/4[/]"),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(bar_width=32),
                 TaskProgressColumn(),
-                console=get_console(),
-                transient=True,
+                TimeElapsedColumn(),
+                console=c,
+                transient=False,
             ) as prog:
-                task_id = prog.add_task("Angular deskew → ref-lines", total=n)
+                task_id = prog.add_task(
+                    "Per-page deskew + vertical ref-lines",
+                    total=n,
+                )
                 for fut in as_completed(futures):
                     page_idx, fixed_pil, top_angle, bot_angle, top_lines, bot_lines = fut.result()
                     results[page_idx] = (fixed_pil, top_angle, bot_angle, top_lines, bot_lines)
                     prog.advance(task_id)
 
     # Bootstrap IGCSE template from page 0 top half (Tesseract, runs once)
-    if verbose:
-        tool_line("deskew", "Extracting IGCSE template from page 1 …")
-    page0_gray = np.array(results[0][0].convert("L"))
-    p0_mid = page0_gray.shape[0] // 2
-    igcse_template = extract_igcse_template(page0_gray[:p0_mid, :], verbose=verbose)
-
-    # Detect IGCSE anchors on all pages (fast template matching, serial)
-    if verbose:
-        tool_line("deskew", "Detecting IGCSE anchors …")
-    page_anchors: dict[int, dict[str, AnchorPoint | None]] = {}
-    for i in range(n):
-        page_gray = np.array(results[i][0].convert("L"))
-        p_mid = page_gray.shape[0] // 2
-        tl, tr = detect_igcse_anchors(page_gray[:p_mid, :], igcse_template)
-        bl, br = detect_igcse_anchors(page_gray[p_mid:, :], igcse_template)
-        page_anchors[i] = {"top_left": tl, "top_right": tr, "bot_left": bl, "bot_right": br}
+    _phase3 = (
+        c.status(
+            "[bold cyan]3/4[/]  IGCSE header (OCR) + anchor matching on each page…",
+            spinner="dots",
+        )
+        if not verbose
+        else nullcontext()
+    )
+    with _phase3:
         if verbose:
-            tool_line(
-                "deskew",
-                f"  page {i + 1:>3} anchors:"
-                f"  TL={tl}  TR={tr}  BL={bl}  BR={br}",
-            )
+            tool_line("deskew", "Extracting IGCSE template from page 1 …")
+        page0_gray = np.array(results[0][0].convert("L"))
+        p0_mid = page0_gray.shape[0] // 2
+        igcse_template = extract_igcse_template(page0_gray[:p0_mid, :], verbose=verbose)
+
+        # Detect IGCSE anchors on all pages (fast template matching, serial)
+        if verbose:
+            tool_line("deskew", "Detecting IGCSE anchors …")
+        page_anchors: dict[int, dict[str, AnchorPoint | None]] = {}
+        for i in range(n):
+            page_gray = np.array(results[i][0].convert("L"))
+            p_mid = page_gray.shape[0] // 2
+            tl, tr = detect_igcse_anchors(page_gray[:p_mid, :], igcse_template)
+            bl, br = detect_igcse_anchors(page_gray[p_mid:, :], igcse_template)
+            page_anchors[i] = {"top_left": tl, "top_right": tr, "bot_left": bl, "bot_right": br}
+            if verbose:
+                tool_line(
+                    "deskew",
+                    f"  page {i + 1:>3} anchors:"
+                    f"  TL={tl}  TR={tr}  BL={bl}  BR={br}",
+                )
     # Build sidecar JSON (ordered by page index)
     def _anc_dict(a: AnchorPoint | None) -> dict | None:
         return asdict(a) if a is not None else None
@@ -692,21 +725,30 @@ def deskew_pdf_raster(
             f"Sidecar (anchors + vertical ref-lines) → {sidecar_path.name}",
         )
 
-    doc = fitz.open()
-    for i in range(n):
-        pil_img, *_ = results[i]
-        buf = io.BytesIO()
-        pil_img.save(buf, format="PNG")
-        png_bytes = buf.getvalue()
+    _phase4 = (
+        c.status(
+            "[bold cyan]4/4[/]  Writing deskewed PDF and embedding page images…",
+            spinner="dots",
+        )
+        if not verbose
+        else nullcontext()
+    )
+    with _phase4:
+        doc = fitz.open()
+        for i in range(n):
+            pil_img, *_ = results[i]
+            buf = io.BytesIO()
+            pil_img.save(buf, format="PNG")
+            png_bytes = buf.getvalue()
 
-        w_px, h_px = pil_img.size
-        pt_per_px = 72.0 / dpi
-        page = doc.new_page(width=w_px * pt_per_px, height=h_px * pt_per_px)
-        rect = fitz.Rect(0, 0, w_px * pt_per_px, h_px * pt_per_px)
-        page.insert_image(rect, stream=png_bytes)
+            w_px, h_px = pil_img.size
+            pt_per_px = 72.0 / dpi
+            page = doc.new_page(width=w_px * pt_per_px, height=h_px * pt_per_px)
+            rect = fitz.Rect(0, 0, w_px * pt_per_px, h_px * pt_per_px)
+            page.insert_image(rect, stream=png_bytes)
 
-    doc.save(str(output_pdf), deflate=True)
-    doc.close()
+        doc.save(str(output_pdf), deflate=True)
+        doc.close()
 
     out_label = saved_as if saved_as is not None else output_pdf.name
     if not verbose:
@@ -717,13 +759,12 @@ def deskew_pdf_raster(
             for i in range(n)
             if len(results[i][3]) == 3 and len(results[i][4]) == 3
         )
-        ok_line(
-            f"Deskew: {n}p @ {dpi} DPI · "
-            f"skew top [{min(tops):+.2f}…{max(tops):+.2f}]° "
-            f"bot [{min(bots):+.2f}…{max(bots):+.2f}]° · "
-            f"vertical ref-lines 3+3 on {ref_ok}/{n} pages · "
-            f"sidecar {sidecar_path.name} · PDF → {out_label}"
+        c.print(
+            f"  [dim]Summary  ·  top [{min(tops):+.2f}…{max(tops):+.2f}]°  "
+            f"bot [{min(bots):+.2f}…{max(bots):+.2f}]°  ·  "
+            f"ref-lines (3 per half) {ref_ok}/{n} pages  ·  {sidecar_path.name}[/]"
         )
+        ok_line(f"Deskew complete — {n} pages @ {dpi} DPI → {out_label}")
     else:
         ref_ok = sum(
             1
