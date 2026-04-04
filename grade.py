@@ -202,6 +202,7 @@ class _GradeCtx:
 def _print_grade_run_footer(ctx: _GradeCtx, gi: SimpleNamespace, elapsed: float) -> None:
     """Always print wall time; note partial or full pipeline in one line when useful."""
     t = f"{elapsed:.1f}s"
+    gi.get_console().print()
     if ctx.partial_stop_readme_step is not None:
         n = ctx.partial_stop_readme_step
         gi.info_line(f"Run · {t} · partial {n}/11")
@@ -209,6 +210,8 @@ def _print_grade_run_footer(ctx: _GradeCtx, gi: SimpleNamespace, elapsed: float)
         gi.info_line(f"Run · {t} · complete")
     else:
         gi.info_line(f"Run · {t}")
+    gi.get_console().print()
+    sys.stdout.flush()
 
 
 def _load_grade_imports() -> SimpleNamespace:
