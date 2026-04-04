@@ -578,7 +578,14 @@ def deskew_pdf_raster(
         TimeElapsedColumn,
     )
 
-    from shared.terminal_ui import format_duration, get_console, info_line, ok_line, tool_line
+    from shared.terminal_ui import (
+        PROGRESS_TASK_TEXT,
+        format_duration,
+        get_console,
+        info_line,
+        ok_line,
+        tool_line,
+    )
 
     c = get_console()
     _pdf_kw = dict(
@@ -631,7 +638,7 @@ def deskew_pdf_raster(
         else:
             t_straight = time.perf_counter()
             with Progress(
-                TextColumn("  {task.description}"),
+                TextColumn(PROGRESS_TASK_TEXT),
                 BarColumn(bar_width=28),
                 TaskProgressColumn(),
                 TimeElapsedColumn(),

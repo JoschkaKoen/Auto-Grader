@@ -87,6 +87,7 @@ def process_pdf(
     output_path = Path(output_path)
 
     from shared.terminal_ui import (
+        PROGRESS_TASK_TEXT,
         err_line,
         format_duration,
         get_console,
@@ -170,7 +171,7 @@ def process_pdf(
         }
         t_osd = time.perf_counter()
         with Progress(
-            TextColumn("  {task.description}"),
+            TextColumn(PROGRESS_TASK_TEXT),
             BarColumn(bar_width=28),
             TaskProgressColumn(),
             TimeElapsedColumn(),

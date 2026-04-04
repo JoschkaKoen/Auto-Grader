@@ -108,6 +108,11 @@ def rule(char: str = "═", width: int = 60) -> str:
     return paint(line, DIM) if use_color() else line
 
 
+# Rich ``TextColumn`` template: aligns task labels with :func:`info_line` / :func:`tool_line`
+# (they print ``  {icon}  {text}`` — two spaces + one-column icon + two spaces).
+PROGRESS_TASK_TEXT = "     {task.description}"
+
+
 def format_duration(seconds: float) -> str:
     """Short duration for CLI (e.g. ``3.1s``, ``1m 5s``)."""
     if seconds < 0:
