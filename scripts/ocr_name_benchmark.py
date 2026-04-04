@@ -147,7 +147,8 @@ def run_easyocr(cv2_img: np.ndarray) -> str:
     return " ".join(fragments)
 
 
-def run_paddleocr(cv2_img: np.ndarray) -> str:
+def run_paddleocr(pil_img: Image.Image) -> str:
+    """Pass the original colour image — PaddleOCR runs its own preprocessing pipeline."""
     try:
         from paddleocr import PaddleOCR
     except ImportError:
@@ -157,8 +158,9 @@ def run_paddleocr(cv2_img: np.ndarray) -> str:
         run_paddleocr._ocr = PaddleOCR(use_textline_orientation=True, lang="en")  # type: ignore[attr-defined]
 
     ocr = run_paddleocr._ocr  # type: ignore[attr-defined]
+    img_rgb = np.array(pil_img.convert("RGB"))
     try:
-        result = ocr.predict(cv2_img)
+        result = ocr.predict(img_rgb)
     except Exception as exc:  # noqa: BLE001 — surface Paddle API/version issues
         return f"[paddleocr error: {exc}]"
 
@@ -231,7 +233,7 @@ def benchmark(
     engines: list[tuple[str, Any]] = [
         ("Tesseract", lambda: run_tesseract(pil_pre)),
         ("EasyOCR", lambda: run_easyocr(cv2_pre)),
-        ("PaddleOCR", lambda: run_paddleocr(cv2_pre)),
+        ("PaddleOCR", lambda: run_paddleocr(pil_strip)),  # uses original colour; has its own pipeline
     ]
 
     rows: list[tuple[str, str, str, str]] = []
