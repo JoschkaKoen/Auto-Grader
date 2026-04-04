@@ -597,16 +597,14 @@ def deskew_pdf_raster(
         )
         pages = convert_from_path(str(input_pdf), **_pdf_kw)
     else:
-        c.print()
-        c.print(f"[bold cyan]Deskew[/]  [dim]{input_pdf.name}  ·  {dpi} DPI[/]")
+        c.print(f"  [dim]›[/]  [bold]Deskew:[/]  {input_pdf.name}  ·  {dpi} DPI")
         with c.status(
-            "[bold cyan]1/4[/]  Loading PDF pages as images…",
+            "  [bold]1/4[/]  Loading PDF pages as images…",
             spinner="dots",
         ):
             pages = convert_from_path(str(input_pdf), **_pdf_kw)
         c.print(
-            f"  [green]✓[/] [bold cyan]1/4[/]  "
-            f"[white]{len(pages)} pages loaded[/]"
+            f"  [green]✓[/]  [bold]1/4[/]  {len(pages)} pages loaded"
         )
     n = len(pages)
     num_workers = min(os.cpu_count() or 4, n)
@@ -638,32 +636,27 @@ def deskew_pdf_raster(
                 tool_line("deskew", f"    ref-lines (after deskew)  bot: {_lines_str(bot_lines)}")
         else:
             with Progress(
-                SpinnerColumn("dots"),
-                TextColumn("[bold cyan]2/4[/]"),
-                TextColumn("[progress.description]{task.description}"),
-                BarColumn(bar_width=32),
+                TextColumn("  [bold]2/4[/]  {task.description}"),
+                BarColumn(bar_width=28),
                 TaskProgressColumn(),
                 TimeElapsedColumn(),
                 console=c,
                 transient=False,
             ) as prog:
                 task_id = prog.add_task(
-                    "Straightening each page",
+                    "Straightening pages",
                     total=n,
                 )
                 for fut in as_completed(futures):
                     page_idx, fixed_pil, top_angle, bot_angle, top_lines, bot_lines = fut.result()
                     results[page_idx] = (fixed_pil, top_angle, bot_angle, top_lines, bot_lines)
                     prog.advance(task_id)
-            c.print(
-                f"  [green]✓[/] [bold cyan]2/4[/]  "
-                f"[white]All {n} pages straightened[/]"
-            )
+            c.print(f"  [green]✓[/]  [bold]2/4[/]  All {n} pages straightened")
 
     # Bootstrap IGCSE template from page 0 top half (Tesseract, runs once)
     _phase3 = (
         c.status(
-            "[bold cyan]3/4[/]  Locating printed header markers on each page…",
+            "  [bold]3/4[/]  Locating printed header markers on each page…",
             spinner="dots",
         )
         if not verbose
@@ -725,14 +718,11 @@ def deskew_pdf_raster(
             f"Sidecar (anchors + vertical ref-lines) → {sidecar_path.name}",
         )
     elif not verbose:
-        c.print(
-            "  [green]✓[/] [bold cyan]3/4[/]  "
-            "[white]Alignment data saved for each page[/]"
-        )
+        c.print("  [green]✓[/]  [bold]3/4[/]  Header markers located")
 
     _phase4 = (
         c.status(
-            "[bold cyan]4/4[/]  Building the deskewed PDF…",
+            "  [bold]4/4[/]  Building the deskewed PDF…",
             spinner="dots",
         )
         if not verbose
@@ -758,8 +748,8 @@ def deskew_pdf_raster(
     out_label = saved_as if saved_as is not None else output_pdf.name
     if not verbose:
         c.print(
-            "  [green]✓[/] [bold cyan]4/4[/]  "
-            f"[white]Deskew saved[/]  [dim]·  {n} pages @ {dpi} DPI  ·  {out_label}[/]"
+            f"  [green]✓[/]  [bold]4/4[/]  Deskew saved  "
+            f"[dim]·  {n} pages @ {dpi} DPI  ·  {out_label}[/]"
         )
     else:
         ref_ok = sum(

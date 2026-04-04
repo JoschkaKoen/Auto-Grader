@@ -170,7 +170,7 @@ def print_scaffold_summary(scaffold: ExamScaffold) -> None:
         )
 
     c.print()
-    c.print(Panel(table, border_style="dim cyan"))
+    c.print(table)
     c.print()
 
 

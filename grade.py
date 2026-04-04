@@ -138,18 +138,19 @@ def main() -> None:
     log_path = Path("logs") / f"{timestamp}.log"
     tee = _Tee(log_path)
     sys.stdout = tee
-    from rich.panel import Panel
+    from rich.rule import Rule
 
     from shared.terminal_ui import get_console, icon, note_line
 
     c = get_console()
     c.print()
     c.print(
-        Panel(
+        Rule(
             f"[bold blue]{icon('spark')}  grade.py  —  Auto-Grader {__version__}[/]",
-            border_style="blue",
+            style="blue",
         )
     )
+    c.print()
     note_line(f"Log file: {log_path}")
 
     try:
