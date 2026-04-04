@@ -225,20 +225,23 @@ def benchmark(
         raw = fn()
         elapsed = time.perf_counter() - t0
         raw_s = raw if isinstance(raw, str) else ""
-        if raw_s.startswith("[") and (
+        is_error = raw_s.startswith("[") and (
             "not installed" in raw_s or "error:" in raw_s.lower()
-        ):
+        )
+        if is_error:
             match_s = "—"
         else:
             matched = fuzzy_match_name(raw_s.strip(), students)
             match_s = matched if matched is not None else "no match"
-        raw_display = raw_s if len(raw_s) <= 80 else raw_s[:77] + "..."
-        # Rich treats "[" as markup; escape so "[easyocr not installed]" is visible.
+        # Collapse newlines so Rich doesn't split the cell across multiple rows.
+        raw_one_line = " | ".join(line.strip() for line in raw_s.splitlines() if line.strip())
+        raw_display = raw_one_line if len(raw_one_line) <= 90 else raw_one_line[:87] + "..."
+        # Rich treats "[" as markup; escape so "[not installed]" messages are visible.
         rows.append((name, escape(raw_display), match_s, format_duration(elapsed)))
 
     table = Table(title="OCR name benchmark", show_header=True, header_style="bold")
     table.add_column("Engine", style="cyan", no_wrap=True)
-    table.add_column("Raw OCR", overflow="fold")
+    table.add_column("Raw OCR", no_wrap=True)
     table.add_column("Match")
     table.add_column("Time", justify="right")
 
