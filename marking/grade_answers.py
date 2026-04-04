@@ -20,6 +20,7 @@ import time
 from pathlib import Path
 from typing import Any
 
+from config import resolve_pipeline_ai_model_id
 from shared.models import ExamScaffold, PageAssignment, Question, StudentResult, TaskInstruction
 
 
@@ -34,7 +35,7 @@ def _to_jpeg_b64(page) -> str:
 
 
 def _kimi_call(client: Any, image_b64: str, prompt: str, max_tokens: int = 128) -> str:
-    model = os.getenv("PIPELINE_AI_MODEL") or "kimi-k2.5"
+    model = resolve_pipeline_ai_model_id()
     is_k2_5 = model.startswith("kimi-k2")
     extra: dict = {}
     if is_k2_5:

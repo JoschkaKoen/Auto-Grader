@@ -187,6 +187,7 @@ def _run(args: argparse.Namespace, timestamp: str) -> None:
     )
     from marking.assign_pages_to_students import assign_pages
     from preprocessing.start_scan import cleanup_pdf
+    from config import pipeline_ai_model_display_name
     from marking.parse_instruction import parse_prompt
     from reports.generate_report import generate_report
     from scaffold.generate_scaffold import build_scaffold
@@ -205,7 +206,7 @@ def _run(args: argparse.Namespace, timestamp: str) -> None:
     # Step 1: Parse natural language prompt                               #
     # ------------------------------------------------------------------ #
     pipeline_step(1, "Your request")
-    info_line("Parsing prompt …")
+    info_line(f"Parsing prompt with {pipeline_ai_model_display_name()} …")
     _t_parse = time.perf_counter()
     instruction = parse_prompt(args.prompt, client=client, dpi_override=args.dpi)
     _parse_elapsed = time.perf_counter() - _t_parse

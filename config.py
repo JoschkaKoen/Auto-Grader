@@ -161,3 +161,26 @@ NAME_CROP_FRACTION = 0.15
 # AI model used by the pipeline (can differ from AI_MODEL used for benchmarking)
 PIPELINE_AI_MODEL = "kimi-k2.5"
 
+
+def resolve_pipeline_ai_model_id() -> str:
+    """Return the pipeline model id (``PIPELINE_AI_MODEL`` env overrides the default)."""
+    v = os.getenv("PIPELINE_AI_MODEL")
+    if v is None or not v.strip():
+        return PIPELINE_AI_MODEL
+    return v.strip()
+
+
+def pipeline_ai_model_display_name() -> str:
+    """Human-readable label for terminal messages (tracks ``resolve_pipeline_ai_model_id()``)."""
+    mid = resolve_pipeline_ai_model_id()
+    low = mid.strip().lower()
+    if low == "kimi-k2.5":
+        return "Kimi K2.5"
+    if low == "kimi-k2":
+        return "Kimi K2"
+    if low.startswith("kimi-"):
+        rest = low[5:].replace("-", " ")
+        return "Kimi " + rest.upper()
+    if low.startswith("gemini-"):
+        return "Gemini " + low[7:].replace("-", " ").title()
+    return mid

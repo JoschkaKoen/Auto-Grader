@@ -6,7 +6,6 @@ Uses a text-only Kimi call (no image) so this step is fast and cheap.
 from __future__ import annotations
 
 import json
-import os
 import re
 import time
 from typing import Any
@@ -81,9 +80,13 @@ Return ONLY the JSON object, no explanation.
 
 def _call_kimi_text(client: Any, user_message: str) -> str:
     """Make a text-only Kimi chat call and return the raw response string."""
-    from config import KIMI_MAX_TOKENS, KIMI_THINKING  # local import to keep module lightweight
+    from config import (  # local import to keep module lightweight
+        KIMI_MAX_TOKENS,
+        KIMI_THINKING,
+        resolve_pipeline_ai_model_id,
+    )
 
-    model = os.getenv("PIPELINE_AI_MODEL") or "kimi-k2.5"
+    model = resolve_pipeline_ai_model_id()
     is_k2_5 = model.startswith("kimi-k2")
     extra: dict = {}
     if is_k2_5:
