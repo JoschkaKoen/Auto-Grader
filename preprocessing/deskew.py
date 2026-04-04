@@ -657,7 +657,7 @@ def deskew_pdf_raster(
     if verbose:
         tool_line("deskew", "Extracting IGCSE template from page 1 …")
     elif not verbose:
-        info_line("Finding headers and margins …")
+        info_line("Finding headers and vertical lines …")
         t_hdr = time.perf_counter()
 
     page0_gray = np.array(results[0][0].convert("L"))
