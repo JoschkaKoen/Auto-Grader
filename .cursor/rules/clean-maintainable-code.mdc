@@ -9,15 +9,12 @@ Self-review every change before presenting it:
 
 1. **Correctness** — edge cases covered (null/empty, off-by-one, type mismatch)?
 2. **Bugs** — typos, wrong variable, inverted condition, missing return?
-3. **Simplicity** — can any block be simplified or replaced by a well-named helper?
-4. **Duplication** — extract repeated logic; don't copy-paste.
+3. **Simplicity** — simplify where a more elegant, powerful, or maintainable solution exists with the same functionality.
+4. **Duplication** — extract only when the logic is truly identical and unlikely to diverge.
 5. **Naming** — names say *what*, not *how*.
 6. **Dead code** — remove unused variables, imports, and commented-out blocks.
 7. **Error handling** — failures are surfaced clearly; never silently swallowed.
-8. **Single responsibility** — one function/class, one job. Split if it grows too large.
+8. **Single responsibility** — split only when a function/class handles clearly separate concerns, not just because it's long.
 
 ## Refactoring
-
-- Keep the public interface unless explicitly asked to change it.
-- Edit the smallest region possible; don't reformat unrelated lines.
 - Fix pre-existing bugs found nearby and call them out.
