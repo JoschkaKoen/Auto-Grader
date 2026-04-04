@@ -590,7 +590,7 @@ def deskew_pdf_raster(
 
     if verbose:
         c.print()
-        tool_line("deskew", f"Rendering {input_pdf.name} at {dpi} DPI …")
+        tool_line("deskew", f"Rendering at {dpi} DPI …")
         tool_line(
             "deskew",
             "Angle detection: coarse 0.1° on ¼-scale proxy, fine 0.01° at full resolution",
@@ -713,10 +713,7 @@ def deskew_pdf_raster(
     sidecar_path.write_text(json.dumps(reflines_data, indent=2))
 
     if verbose:
-        tool_line(
-            "deskew",
-            f"Sidecar (anchors + vertical ref-lines) → {sidecar_path.name}",
-        )
+        tool_line("deskew", "Saved alignment data (anchors and layout lines).")
     elif not verbose:
         c.print("  [green]✓[/]  [bold]3/4[/]  Page layout detected")
 
@@ -757,8 +754,7 @@ def deskew_pdf_raster(
             if len(results[i][3]) == 3 and len(results[i][4]) == 3
         )
         ok_line(
-            f"Deskew saved → {output_pdf.name} · "
-            f"vertical ref-lines 3+3 on {ref_ok}/{n} pages"
+            f"Pages aligned · vertical ref-lines 3+3 on {ref_ok}/{n} pages"
         )
     return output_pdf
 
@@ -868,5 +864,5 @@ def overlay_reflines_on_pdf(
     finally:
         doc.close()
 
-    tool_line("reflines_overlay", f"Saved → {output_pdf}")
+    tool_line("reflines_overlay", "Saved.")
     return output_pdf

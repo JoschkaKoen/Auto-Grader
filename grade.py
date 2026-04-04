@@ -151,7 +151,7 @@ def main() -> None:
         )
     )
     c.print()
-    note_line(f"Log file: {log_path}")
+    note_line("This run is being logged.")
 
     try:
         _run(args, timestamp)
@@ -246,7 +246,7 @@ def _run(args: argparse.Namespace, timestamp: str) -> None:
         cli_override=args.folder,
         ai_folder_path=None if args.folder else instruction.folder_path,
     )
-    note_line(f"Exam: {folder.name}")
+    note_line("Exam folder found.")
 
     stem = folder.name.replace(" ", "_")
     exam_output_root = Path("output") / stem
@@ -259,7 +259,7 @@ def _run(args: argparse.Namespace, timestamp: str) -> None:
     artifact_dir.mkdir(parents=True, exist_ok=True)
     # Reports and all derived files for this invocation live in the same run folder.
     run_dir = artifact_dir
-    note_line(f"Results: {artifact_dir}")
+    note_line(f"Run started at {timestamp}")
     if through_step == 2:
         raise SystemExit(0)
 
@@ -286,7 +286,7 @@ def _run(args: argparse.Namespace, timestamp: str) -> None:
         ):
             if cache_p.is_file():
                 cache_p.unlink()
-                warn_line(f"rescaffold: removed {cache_p}")
+                warn_line("Removed cached scaffold (rebuild).")
 
     scaffold = build_scaffold(folder, client=client, artifact_dir=artifact_dir)
     print_scaffold_summary(scaffold)
@@ -302,10 +302,10 @@ def _run(args: argparse.Namespace, timestamp: str) -> None:
         legacy_cleaned = folder / "cleaned_scan.pdf"
         if cleaned_here.exists():
             cleaned_pdf = cleaned_here
-            info_line(f"skip_clean_scan: using {cleaned_pdf}")
+            info_line("Using existing cleaned scan (skip).")
         elif legacy_cleaned.exists():
             cleaned_pdf = legacy_cleaned
-            info_line(f"skip_clean_scan: using legacy {cleaned_pdf}")
+            info_line("Using existing cleaned scan (skip).")
         else:
             scans = list(folder.glob("*.pdf"))
             scans = [f for f in scans if "scan" in f.name.lower()]
@@ -313,7 +313,7 @@ def _run(args: argparse.Namespace, timestamp: str) -> None:
                 err_line("skip_clean_scan set but no scan PDF found.")
                 raise SystemExit(1)
             cleaned_pdf = scans[0]
-            info_line(f"skip_clean_scan: using {cleaned_pdf.name}")
+            info_line("Using existing scan PDF (skip).")
     else:
         cleaned_pdf = cleanup_pdf(
             folder,
@@ -378,7 +378,7 @@ def _run(args: argparse.Namespace, timestamp: str) -> None:
     eval_data: dict | None = None
     gt_file = find_ground_truth_file(folder)
     if gt_file is not None:
-        note_line(f"Ground truth file: {gt_file.name}")
+        note_line("Ground truth file found — running check.")
         gt = load_ground_truth(folder, scaffold)
         if gt:
             eval_data = evaluate_results(results, gt, scaffold)
@@ -407,7 +407,7 @@ def _run(args: argparse.Namespace, timestamp: str) -> None:
             eval_data=eval_data,
             title=title,
         )
-        ok_line(f"Report: {output_pdf}")
+        ok_line("Report saved.")
     else:
         info_line("no_report: skipping LaTeX/PDF.")
     if through_step == 11:

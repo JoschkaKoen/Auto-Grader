@@ -66,6 +66,7 @@ def cleanup_pdf(
     legacy_side_reflines = legacy_out.with_name(f"{legacy_out.stem}_reflines.json")
 
     if force_clean_scan:
+        _removed = False
         for p in (
             output,
             sidecar,
@@ -76,14 +77,16 @@ def cleanup_pdf(
         ):
             if p.exists():
                 p.unlink()
-                tool_line("start_scan", f"--force-clean-scan: removed {p.name}")
+                _removed = True
+        if _removed:
+            tool_line("start_scan", "Removed previous cleaned output (force).")
 
     if not force_clean_scan and output.exists() and output.stat().st_mtime >= match.stat().st_mtime:
-        tool_line("start_scan", f"Using cached cleaned scan: {output}")
+        tool_line("start_scan", "Using cached cleaned scan.")
         return output
 
     if not force_clean_scan and legacy_out.exists() and legacy_out.stat().st_mtime >= match.stat().st_mtime:
-        tool_line("start_scan", f"Migrating legacy {legacy_out.name} → {output} …")
+        tool_line("start_scan", "Moving old cleaned scan into this run …")
         shutil.copy2(legacy_out, output)
         if legacy_side.is_file():
             shutil.copy2(legacy_side, sidecar)
@@ -101,7 +104,7 @@ def cleanup_pdf(
                     pass
         return output
 
-    tool_line("start_scan", f"Cleaning: {match.name}")
+    tool_line("start_scan", "Cleaning class scan …")
     process_pdf(
         input_path=str(match),
         output_path=str(output),

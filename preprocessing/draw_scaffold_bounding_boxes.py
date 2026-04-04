@@ -77,9 +77,9 @@ def write_projected_scaffold_debug_pdf(
 
     if not force_layout_mismatch and exam_for_scaffold.resolve() != raw4.resolve():
         msg = (
-            "Skip projected overlay: scaffold from "
-            f"{exam_for_scaffold.name!r} but anchors use {raw4.name!r}. "
-            "Use the same 4-up file for scaffold and anchors, or pass force_layout_mismatch."
+            "Skip projected overlay: the exam PDF used for the scaffold does not match "
+            "the four-up scan used for anchors. Use the same file for both, or pass "
+            "force_layout_mismatch."
         )
         (warn_line if verbose else info_line)(msg)
         return None

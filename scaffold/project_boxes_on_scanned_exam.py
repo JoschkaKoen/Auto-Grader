@@ -559,7 +559,7 @@ def overlay_projected_scaffold_on_scan_pdf(
         save_path.replace(output_pdf)
 
     if verbose:
-        ok_line(f"Overlay: {total_rects} boxes across {n_overlay} pages → {output_pdf.name}")
+        ok_line(f"Overlay: {total_rects} boxes across {n_overlay} pages")
     return output_pdf
 
 
@@ -584,7 +584,7 @@ def _print_page_transforms(
 
         get_console().print(
             Panel(
-                f"Page {page_number} not found in {reflines_json.name}",
+                f"Page {page_number} not found in alignment data.",
                 border_style="red",
             )
         )

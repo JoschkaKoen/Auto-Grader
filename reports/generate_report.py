@@ -288,7 +288,7 @@ def generate_report(
 
     doc = _full_document(title, scaffold, results, eval_data)
     output_tex.write_text(doc, encoding="utf-8")
-    tool_line("report", f"LaTeX written → {output_tex}")
+    tool_line("report", "LaTeX source written.")
 
     # xelatex must be run in the output dir so aux files land there
     result = subprocess.run(
@@ -309,5 +309,5 @@ def generate_report(
         tool_line("report", result.stdout[-800:] if result.stdout else "(no output)")
         return False
 
-    ok_line(f"PDF report → {output_pdf}")
+    ok_line("PDF report ready.")
     return True

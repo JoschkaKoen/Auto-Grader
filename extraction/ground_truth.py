@@ -34,7 +34,7 @@ def load_ground_truth(gt_path: Path | None = None) -> dict[str, list[str]]:
     except OSError as e:
         from shared.terminal_ui import warn_line
 
-        warn_line(f"Could not load ground truth from {path}: {e}")
+        warn_line(f"Could not load ground truth: {e}")
 
     return gt_data
 

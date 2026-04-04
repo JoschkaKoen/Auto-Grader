@@ -28,7 +28,7 @@ def load_existing_results(output_json: Path) -> dict[int, dict]:
             records = json.load(f)
         return {r["page_number"]: r for r in records if "page_number" in r}
     except (json.JSONDecodeError, KeyError, TypeError, ValueError) as e:
-        warn_line(f"Could not parse existing results from {output_json} ({e}), starting fresh.")
+        warn_line(f"Could not parse saved results ({e}), starting fresh.")
         return {}
 
 
@@ -111,7 +111,7 @@ def generate_report_pdf(results: list[dict], output_tex: Path, output_report: Pa
         f.write(tex)
 
     c = get_console()
-    c.print(f"\n[dim]Compiling LaTeX → {output_report} …[/]")
+    c.print("\n[dim]Compiling LaTeX …[/]")
     result = subprocess.run(
         ["xelatex", "-interaction=nonstopmode", str(output_tex)],
         capture_output=True,
@@ -123,7 +123,7 @@ def generate_report_pdf(results: list[dict], output_tex: Path, output_report: Pa
         if tail:
             c.print(Panel(tail.rstrip(), title="xelatex tail", border_style="red"))
     else:
-        c.print(f"[green]  Report generated: {output_report}[/]")
+        c.print("[green]  Report generated.[/]")
 
     for ext in (".aux", ".log", ".out"):
         aux = output_tex.with_suffix(ext)

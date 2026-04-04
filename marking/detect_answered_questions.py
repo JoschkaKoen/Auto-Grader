@@ -94,7 +94,7 @@ def detect_answered_exercises(
     prompt = _build_prompt(question_numbers)
 
     from shared.terminal_ui import tool_line
-    tool_line("detect", f"Rendering {cleaned_pdf.name} @ {dpi} DPI …")
+    tool_line("detect", f"Rendering pages @ {dpi} DPI …")
     all_pages = convert_from_path(str(cleaned_pdf), dpi=dpi, thread_count=os.cpu_count() or 4)
 
     result: dict[str, list[str]] = {}

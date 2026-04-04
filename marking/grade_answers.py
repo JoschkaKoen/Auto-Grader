@@ -220,7 +220,7 @@ def grade_students(
     assignments = _filter_students(page_map, instruction)
 
     from shared.terminal_ui import info_line, tool_line
-    tool_line("grade", f"Rendering {cleaned_pdf.name} @ {dpi} DPI …")
+    tool_line("grade", f"Rendering pages @ {dpi} DPI …")
     all_pages = convert_from_path(str(cleaned_pdf), dpi=dpi, thread_count=os.cpu_count() or 4)
 
     leaves = scaffold.gradable_questions

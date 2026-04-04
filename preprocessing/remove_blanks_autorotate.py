@@ -106,11 +106,10 @@ def process_pdf(
         c.print()
         c.print(
             Panel(
-                f"[bold cyan]{icon('doc')}  PDF prep  —  {input_path.name}[/]",
+                f"[bold cyan]{icon('doc')}  PDF prep[/]",
                 border_style="dim cyan",
             )
         )
-        note_line(f"Full path: {input_path}")
         note_line(
             f"Analysis DPI: {analysis_dpi}  |  Blank: mean≥{blank_mean}, std≤{blank_std}"
         )
@@ -226,7 +225,7 @@ def process_pdf(
 
     if verbose:
         note_line(f"Pages retained: {len(content_page_nums)}/{total_pages}")
-        note_line(f"Writing: {output_path}")
+        note_line("Saving cleaned PDF …")
 
     out_pdf.save(str(output_path))
     out_pdf.close()
