@@ -20,10 +20,14 @@ from __future__ import annotations
 
 import argparse
 import io
+import os
 import sys
 import time
 from pathlib import Path
 from typing import Any
+
+# Skip Paddle's slow network connectivity check on every run
+os.environ.setdefault("PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK", "True")
 
 import numpy as np
 from PIL import Image
@@ -165,23 +169,28 @@ def run_paddleocr(cv2_img: np.ndarray) -> str:
     for page_result in result:
         if page_result is None:
             continue
-        # New predict() API: list of dicts with "rec_text" / "rec_score" keys
-        if isinstance(page_result, dict):
-            texts = page_result.get("rec_text") or page_result.get("text") or []
-            scores = page_result.get("rec_score") or page_result.get("score") or []
-            for text, score in zip(texts, scores or [1.0] * len(texts)):
+        # New predict() API: OCRResult object, dict-convertible with rec_texts/rec_scores
+        try:
+            d = dict(page_result)
+        except (TypeError, ValueError):
+            d = {}
+        if d:
+            texts = d.get("rec_texts") or d.get("rec_text") or []
+            scores = d.get("rec_scores") or d.get("rec_score") or [1.0] * len(texts)
+            for text, score in zip(texts, scores):
                 if float(score) >= 0.3:
                     fragments.append(str(text))
             continue
         # Legacy ocr() API: list of [box, [text, conf]]
-        for line in page_result:
-            if not isinstance(line, (list, tuple)) or len(line) < 2:
-                continue
-            payload = line[1]
-            if isinstance(payload, (list, tuple)) and len(payload) >= 2:
-                text, conf = payload[0], payload[1]
-                if float(conf) >= 0.3:
-                    fragments.append(str(text))
+        if isinstance(page_result, (list, tuple)):
+            for line in page_result:
+                if not isinstance(line, (list, tuple)) or len(line) < 2:
+                    continue
+                payload = line[1]
+                if isinstance(payload, (list, tuple)) and len(payload) >= 2:
+                    text, conf = payload[0], payload[1]
+                    if float(conf) >= 0.3:
+                        fragments.append(str(text))
     return " ".join(fragments)
 
 
