@@ -104,7 +104,7 @@ def cleanup_pdf(
                     pass
         return output
 
-    tool_line("start_scan", "Cleaning class scan …")
+    tool_line("start_scan", "Detect empty pages and page rotation …")
     process_pdf(
         input_path=str(match),
         output_path=str(output),

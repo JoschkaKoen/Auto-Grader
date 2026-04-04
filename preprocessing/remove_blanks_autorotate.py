@@ -175,7 +175,7 @@ def process_pdf(
             console=c,
             transient=False,
         ) as prog:
-            task_id = prog.add_task("Checking page rotation", total=len(futures))
+            task_id = prog.add_task("", total=len(futures))
             for future in as_completed(futures):
                 page_num, angle = future.result()
                 rotation_map[page_num] = angle

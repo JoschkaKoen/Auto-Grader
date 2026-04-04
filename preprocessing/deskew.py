@@ -636,6 +636,7 @@ def deskew_pdf_raster(
                 tool_line("deskew", f"    ref-lines (after deskew)  top: {_lines_str(top_lines)}")
                 tool_line("deskew", f"    ref-lines (after deskew)  bot: {_lines_str(bot_lines)}")
         else:
+            info_line("Detecting small angle rotation …")
             with Progress(
                 TextColumn(PROGRESS_TASK_TEXT),
                 BarColumn(bar_width=28),
@@ -644,10 +645,7 @@ def deskew_pdf_raster(
                 console=c,
                 transient=False,
             ) as prog:
-                task_id = prog.add_task(
-                    "Straightening pages",
-                    total=n,
-                )
+                task_id = prog.add_task("", total=n)
                 for fut in as_completed(futures):
                     page_idx, fixed_pil, top_angle, bot_angle, top_lines, bot_lines = fut.result()
                     results[page_idx] = (fixed_pil, top_angle, bot_angle, top_lines, bot_lines)
