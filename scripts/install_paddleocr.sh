@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Optional PaddleOCR + EasyOCR stack in an isolated venv (paddle_env/).
 # xScore grading still uses .venv — see README.
+#
+# Requires Python 3.13 (max supported by Paddle wheels; 3.14+ has no wheel).
+# Looks for python3.13 on PATH, then falls back to python3.12.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -17,6 +20,18 @@ if ! command -v brew &>/dev/null; then
   exit 1
 fi
 
+# Pick Python ≤3.13 — Paddle has no wheel for 3.14+
+if command -v python3.13 &>/dev/null; then
+  PYTHON_BIN="$(command -v python3.13)"
+elif command -v python3.12 &>/dev/null; then
+  PYTHON_BIN="$(command -v python3.12)"
+else
+  echo "Python 3.12 or 3.13 is required (PaddlePaddle has no wheel for 3.14+)."
+  echo "Install with: brew install python@3.13"
+  exit 1
+fi
+echo "Using Python: ${PYTHON_BIN} ($("${PYTHON_BIN}" --version))"
+
 echo "--- Homebrew: cmake, pkg-config, opencv ---"
 brew install cmake pkg-config opencv
 
@@ -27,8 +42,8 @@ if [[ "${FORCE:-0}" == "1" ]] && [[ -d "${VENV}" ]]; then
 fi
 
 if [[ ! -d "${VENV}" ]]; then
-  echo "--- Creating paddle_env ---"
-  python3 -m venv "${VENV}"
+  echo "--- Creating paddle_env (${PYTHON_BIN}) ---"
+  "${PYTHON_BIN}" -m venv "${VENV}"
 else
   echo "--- Using existing paddle_env (set FORCE=1 to recreate) ---"
 fi
