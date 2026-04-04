@@ -27,6 +27,7 @@ Tunables below apply to extraction/, the other top-level packages, and grade.py
 
 import os
 from pathlib import Path
+from typing import Any
 
 # =============================================================================
 # AI Model Configuration
@@ -42,6 +43,7 @@ from pathlib import Path
 # To change the model, either:
 #   1. Edit the line below, OR
 #   2. Set AI_MODEL environment variable (takes precedence)
+# Scope: extraction/benchmarking (extraction/providers/kimi.py, Gemini path) — not grade.py marking.
 AI_MODEL = os.getenv("AI_MODEL", "kimi-k2.5")
 
 # Exam layout + prompt + schema (see extraction/profiles/)
@@ -175,8 +177,22 @@ NAME_RECOGNITION_DPI = 200
 # Fraction of the page height to crop for name detection (top strip only)
 NAME_CROP_FRACTION = 0.15
 
-# AI model used by the pipeline (can differ from AI_MODEL used for benchmarking)
+# AI model used by grade.py marking (parse_prompt, assign_pages, grade_answers, etc.).
+# Can differ from AI_MODEL above; override with PIPELINE_AI_MODEL env.
 PIPELINE_AI_MODEL = "kimi-k2.5"
+
+# Inter-call delays in the marking pipeline (rate limiting). Override via env if needed.
+GRADE_QUESTION_DELAY_S: float = float(os.getenv("GRADE_QUESTION_DELAY_S", "0.15"))
+PAGE_API_DELAY_S: float = float(os.getenv("PAGE_API_DELAY_S", "0.2"))
+
+
+def apply_kimi_k2_extra(model: str, kwargs: dict[str, Any], *, thinking: bool = False) -> None:
+    """If *model* is a kimi-k2.x id, set ``kwargs['extra_body']`` for the thinking API.
+
+    No-op for other model ids. *thinking* True → ``\"enabled\"``, False → ``\"disabled\"``.
+    """
+    if model.startswith("kimi-k2"):
+        kwargs["extra_body"] = {"thinking": {"type": "enabled" if thinking else "disabled"}}
 
 
 def resolve_pipeline_ai_model_id() -> str:

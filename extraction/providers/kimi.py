@@ -11,8 +11,16 @@ from typing import Any
 
 from pydantic import BaseModel, ValidationError
 
-from config import AI_MODEL, KIMI_MAX_TOKENS, KIMI_THINKING, MAX_RETRIES, RETRY_BACKOFF_S
+from config import (
+    AI_MODEL,
+    KIMI_MAX_TOKENS,
+    KIMI_THINKING,
+    MAX_RETRIES,
+    RETRY_BACKOFF_S,
+    apply_kimi_k2_extra,
+)
 from extraction.images import normalize_extracted_record
+from shared.terminal_ui import log_ai_response_debug
 
 
 try:
@@ -175,11 +183,8 @@ class KimiProvider:
         # kimi-k2.5 has fixed temperature (1.0 thinking / 0.6 non-thinking);
         # passing any other value raises a 400 error.
         # For older moonshot-v1-* models, pass the configured temperature normally.
-        is_k2_5 = _kimi_k2_5_model()
-        extra: dict = {}
-        if is_k2_5:
-            thinking_type = "enabled" if KIMI_THINKING else "disabled"
-            extra["extra_body"] = {"thinking": {"type": thinking_type}}
+        # Retries: first sleep is RETRY_BACKOFF_S (default 1s), then doubling. The marking
+        # pipeline uses 2**attempt seconds (2s, 4s) — intentional; see marking/kimi_helpers.
 
         for attempt in range(1, MAX_RETRIES + 1):
             try:
@@ -199,11 +204,12 @@ class KimiProvider:
                     ],
                     max_tokens=KIMI_MAX_TOKENS,
                     response_format={"type": "json_object"},
-                    **extra,
                 )
+                apply_kimi_k2_extra(AI_MODEL, kwargs, thinking=KIMI_THINKING)
                 response = client.chat.completions.create(**kwargs)
 
                 raw = response.choices[0].message.content or ""
+                log_ai_response_debug("kimi_extract", AI_MODEL, raw)
                 try:
                     data = json.loads(raw)
                     # Filter out extra fields Kimi might add (notes, overall_confidence, etc.)

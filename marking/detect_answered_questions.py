@@ -9,9 +9,10 @@ from __future__ import annotations
 import os
 import time
 from pathlib import Path
-from typing import Any
 
-from .kimi_helpers import kimi_image_call, page_to_jpeg_b64, parse_json_safe
+from config import PAGE_API_DELAY_S
+
+from .kimi_helpers import KimiChatClient, kimi_image_call, page_to_jpeg_b64, parse_json_safe
 from shared.models import ExamScaffold, PageAssignment
 
 
@@ -37,7 +38,7 @@ def detect_answered_exercises(
     page_map: list[PageAssignment],
     scaffold: ExamScaffold,
     dpi: int = 200,
-    client: Any | None = None,
+    client: KimiChatClient | None = None,
     *,
     pages: list | None = None,
 ) -> dict[str, list[str]]:
@@ -85,7 +86,7 @@ def detect_answered_exercises(
                 page_attempted = []
 
             attempted.update(page_attempted)
-            time.sleep(0.2)
+            time.sleep(PAGE_API_DELAY_S)
 
         result[name] = sorted(attempted, key=lambda n: (len(n), n))
 

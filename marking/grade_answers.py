@@ -17,7 +17,9 @@ import time
 from pathlib import Path
 from typing import Any
 
-from .kimi_helpers import kimi_image_call, page_to_jpeg_b64, parse_json_safe
+from config import GRADE_QUESTION_DELAY_S
+
+from .kimi_helpers import KimiChatClient, kimi_image_call, page_to_jpeg_b64, parse_json_safe
 from shared.models import ExamScaffold, PageAssignment, Question, StudentResult, TaskInstruction
 
 
@@ -36,7 +38,7 @@ def _prompt_mc(question: Question) -> str:
 
 
 def _grade_mc(
-    client: Any,
+    client: KimiChatClient,
     pages: list,
     question: Question,
 ) -> tuple[str, float]:
@@ -51,7 +53,7 @@ def _grade_mc(
         if answer not in ("", "?"):
             marks = float(question.marks) if answer == correct else 0.0
             return answer, marks
-        time.sleep(0.15)
+        time.sleep(GRADE_QUESTION_DELAY_S)
 
     return "?", 0.0
 
@@ -72,7 +74,7 @@ def _prompt_written(question: Question) -> str:
 
 
 def _grade_written(
-    client: Any,
+    client: KimiChatClient,
     pages: list,
     question: Question,
 ) -> tuple[str, float]:
@@ -87,7 +89,7 @@ def _grade_written(
             marks = 0.0
         if answer not in ("", "?"):
             return answer, marks
-        time.sleep(0.15)
+        time.sleep(GRADE_QUESTION_DELAY_S)
 
     return "?", 0.0
 
@@ -108,7 +110,7 @@ If no red marks are visible, return:
 """
 
 
-def _count_marks_on_page(client: Any, page) -> dict[str, float]:
+def _count_marks_on_page(client: KimiChatClient, page) -> dict[str, float]:
     img_b64 = page_to_jpeg_b64(page)
     raw = kimi_image_call(client, img_b64, _COUNT_PROMPT, max_tokens=256)
     data = parse_json_safe(raw)
@@ -145,7 +147,7 @@ def grade_students(
     exercise_map: dict[str, list[str]],
     scaffold: ExamScaffold,
     instruction: TaskInstruction,
-    client: Any | None = None,
+    client: KimiChatClient | None = None,
     *,
     pages: list | None = None,
 ) -> list[StudentResult]:
@@ -197,7 +199,7 @@ def grade_students(
                 page_marks = _count_marks_on_page(client, page)
                 for q_num, m in page_marks.items():
                     marks_per_q[q_num] = marks_per_q.get(q_num, 0.0) + m
-                time.sleep(0.15)
+                time.sleep(GRADE_QUESTION_DELAY_S)
 
         elif task in ("check_mc", "check_answers"):
             questions_to_grade = mc_questions if task == "check_mc" else all_questions
@@ -215,7 +217,7 @@ def grade_students(
                 answers[q.number] = ans
                 marks_per_q[q.number] = marks
                 info_line(f"Q{q.number}: {ans}  →  {marks}/{q.marks}")
-                time.sleep(0.15)
+                time.sleep(GRADE_QUESTION_DELAY_S)
 
         total = sum(marks_per_q.values())
         max_marks = sum(q.marks for q in scaffold.gradable_questions)

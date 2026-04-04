@@ -6,6 +6,7 @@ Set ``PIPELINE_VERBOSE=1`` or ``GRADE_VERBOSE=1`` for wide step banners.
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 
@@ -170,6 +171,31 @@ def pipeline_verbose() -> bool:
     """True when ``PIPELINE_VERBOSE`` or ``GRADE_VERBOSE`` requests heavy banners / debug."""
     v = (os.environ.get("PIPELINE_VERBOSE") or os.environ.get("GRADE_VERBOSE") or "").strip()
     return v.lower() in ("1", "true", "yes", "on")
+
+
+def pipeline_debug_ai() -> bool:
+    """True when ``PIPELINE_DEBUG_AI`` requests stderr logging of truncated model responses."""
+    v = (os.environ.get("PIPELINE_DEBUG_AI") or "").strip()
+    return v.lower() in ("1", "true", "yes", "on")
+
+
+_AI_LOG = logging.getLogger("autograder.ai")
+_ai_log_handler_installed = False
+
+
+def log_ai_response_debug(tag: str, model: str, raw: str) -> None:
+    """Log first 500 chars of *raw* at DEBUG when ``PIPELINE_DEBUG_AI`` is set."""
+    global _ai_log_handler_installed
+    if not pipeline_debug_ai():
+        return
+    if not _ai_log_handler_installed:
+        _ai_log_handler_installed = True
+        _AI_LOG.setLevel(logging.DEBUG)
+        h = logging.StreamHandler(sys.stderr)
+        h.setFormatter(logging.Formatter("%(levelname)s %(name)s: %(message)s"))
+        _AI_LOG.addHandler(h)
+        _AI_LOG.propagate = False
+    _AI_LOG.debug("%s model=%s raw_truncated=%r", tag, model, (raw or "")[:500])
 
 
 def pipeline_step(

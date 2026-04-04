@@ -15,9 +15,10 @@ from __future__ import annotations
 import os
 import time
 from pathlib import Path
-from typing import Any
 
-from .kimi_helpers import kimi_image_call, page_to_jpeg_b64, parse_json_safe
+from config import PAGE_API_DELAY_S
+
+from .kimi_helpers import KimiChatClient, kimi_image_call, page_to_jpeg_b64, parse_json_safe
 from shared.models import PageAssignment
 
 
@@ -42,7 +43,7 @@ def assign_pages(
     cleaned_pdf: Path,
     students: list[str],
     dpi: int = 200,
-    client: Any | None = None,
+    client: KimiChatClient | None = None,
     name_crop_fraction: float = 0.15,
     *,
     verbose: bool = True,
@@ -82,7 +83,7 @@ def assign_pages(
         if verbose or i == 1 or i == n_pages or (i % step == 0):
             info_line(f"Page {i:3d}/{n_pages}: raw name = {name!r}")
         raw_names.append(name)
-        time.sleep(0.2)  # light rate-limit
+        time.sleep(PAGE_API_DELAY_S)
     if not verbose and n_pages > 1:
         info_line(f"Name OCR: {n_pages} pages (sample every {step}; verbose=all lines)")
 

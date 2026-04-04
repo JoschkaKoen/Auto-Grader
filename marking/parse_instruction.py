@@ -6,10 +6,10 @@ Uses a text-only Kimi call (no image) so this step is fast and cheap.
 from __future__ import annotations
 
 import re
-import time
-from typing import Any
 
-from .kimi_helpers import parse_json_safe
+from config import KIMI_THINKING, PARSE_PROMPT_MAX_TOKENS
+
+from .kimi_helpers import KimiChatClient, kimi_text_call, parse_json_safe
 from shared.models import StudentFilter, TaskInstruction
 from shared.terminal_ui import info_line, warn_line
 
@@ -44,49 +44,24 @@ no_report: true=skip PDF ("terminal only", "no report").
 """
 
 
-def _call_kimi_text(client: Any, user_message: str) -> str:
+def _call_kimi_text(client: KimiChatClient, user_message: str) -> str:
     """Make a text-only Kimi chat call and return the raw response string."""
-    from config import (  # local import to keep module lightweight
-        KIMI_THINKING,
-        PARSE_PROMPT_MAX_TOKENS,
-        resolve_pipeline_ai_model_id,
-    )
-
-    model = resolve_pipeline_ai_model_id()
-    is_k2_5 = model.startswith("kimi-k2")
-    extra: dict = {}
-    if is_k2_5:
-        thinking_type = "enabled" if KIMI_THINKING else "disabled"
-        extra["extra_body"] = {"thinking": {"type": thinking_type}}
-
-    kwargs: dict = dict(
-        model=model,
-        messages=[
-            {"role": "system", "content": _SYSTEM_PROMPT},
-            {"role": "user", "content": user_message},
-        ],
+    messages = [
+        {"role": "system", "content": _SYSTEM_PROMPT},
+        {"role": "user", "content": user_message},
+    ]
+    return kimi_text_call(
+        client,
+        messages,
         max_tokens=PARSE_PROMPT_MAX_TOKENS,
-        response_format={"type": "json_object"},
-        **extra,
+        thinking=KIMI_THINKING,
+        warn_prefix="Parse prompt API error",
     )
-    # kimi-k2.x rejects non-default temperature (400); other models benefit from 0 for JSON.
-    if not model.startswith("kimi-k2"):
-        kwargs["temperature"] = 0
-
-    for attempt in range(1, 4):
-        try:
-            response = client.chat.completions.create(**kwargs)
-            return response.choices[0].message.content or ""
-        except Exception as exc:
-            warn_line(f"Parse prompt API error (attempt {attempt}/3): {exc}")
-            if attempt < 3:
-                time.sleep(2 ** attempt)
-    return ""
 
 
 def parse_prompt(
     prompt: str,
-    client: Any | None = None,
+    client: KimiChatClient | None = None,
     dpi_override: int | None = None,
 ) -> TaskInstruction:
     """Parse *prompt* into a ``TaskInstruction``.
