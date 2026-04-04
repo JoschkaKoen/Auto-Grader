@@ -15,19 +15,14 @@ from shared.terminal_ui import info_line, warn_line
 
 
 _SYSTEM_PROMPT = """\
-You are an exam grading assistant. Convert the user's natural language grading \
-instruction into a JSON object with the following structure:
+Convert the grading instruction to JSON. Return ONLY the JSON, no explanation.
 
 {
-  "task_type": "count_marks" | "check_mc" | "check_answers",
-  "student_filter": {
-    "mode": "all" | "specific" | "first_n",
-    "names": ["Name1", "Name2"],
-    "n": 5
-  },
+  "task_type": "count_marks|check_mc|check_answers",
+  "student_filter": {"mode": "all|specific|first_n", "names": [], "n": 0},
   "dpi": 400,
-  "folder_hint": "short folder name for matching, or null",
-  "folder_path": "explicit relative or absolute path to exam folder, or null",
+  "folder_hint": null,
+  "folder_path": null,
   "skip_clean_scan": false,
   "force_clean_scan": false,
   "rescaffold": false,
@@ -35,54 +30,25 @@ instruction into a JSON object with the following structure:
   "no_report": false
 }
 
-Task type rules:
-- "count_marks"   → teacher already marked in red; just tally the written scores.
-- "check_mc"      → verify only multiple-choice answers against the answer key.
-- "check_answers" → verify ALL question types against the answer key.
-
-Student filter rules:
-- Default mode is "all".
-- "specific" if the prompt names individual students.
-- "first_n" if the prompt says "first N students" or similar.
-
-DPI rules:
-- Default is 400.
-- Use 300 if the prompt says "fast" or "quick".
-- Use 600 if the prompt says "high quality" or "accurate".
-
-folder_hint vs folder_path:
-- folder_hint: basename or short label for fuzzy match (e.g. "Space Physics Unit Test").
-- folder_path: use only if the user gives a path (e.g. "exams/physics_mock"); null otherwise.
-- Prefer folder_path when both would apply.
-
-skip_clean_scan (true when user wants to reuse existing cleaned scan without rotate/deskew):
-- e.g. "skip cleaning", "use existing cleaned scan", "don't reprocess the scan".
-
-force_clean_scan (true when user wants to ignore cleaned_scan cache and clean again):
-- e.g. "re-clean the scan", "force new deskew", "ignore cached cleaned pdf".
-
-rescaffold (true when user wants to rebuild scaffold from exam PDFs):
-- e.g. "rebuild scaffold", "reparse the exam", "refresh question boxes".
-
-through_step: integer 1–11 or null. Stop after pipeline step N (README table):
-  1 parse prompt, 2 find folder, 3 roster, 4 scaffold, 5 clean scan, 6 assign pages,
-  7 exercise detection, 8 grade, 9 print results, 10 ground truth, 11 report.
-- e.g. "stop after assigning pages" → 6. Usually null.
-
-no_report (true to skip LaTeX/PDF report):
-- e.g. "terminal only", "no pdf report", "skip report".
-
-Never set both skip_clean_scan and force_clean_scan to true.
-
-Return ONLY the JSON object, no explanation.
+task_type: count_marks=tally red teacher marks; check_mc=MC only; check_answers=all types.
+student_filter.mode: all=default; specific=named students; first_n=first N (set n). names=list.
+dpi: 400 default; 300 if "fast"/"quick"; 600 if "high quality"/"accurate".
+folder_hint: short name for fuzzy folder match. folder_path: only if user gives explicit path; else null.
+Prefer folder_path when both apply.
+skip_clean_scan: true=reuse cleaned scan ("skip cleaning", "don't reprocess").
+force_clean_scan: true=ignore cache, re-clean ("re-clean", "force deskew"). Never both true.
+rescaffold: true=rebuild scaffold ("rebuild scaffold", "reparse", "refresh questions").
+through_step: 1-11 or null. 1=parse, 2=find folder, 3=roster, 4=scaffold, 5=clean scan,
+  6=assign pages, 7=exercises, 8=grade, 9=print results, 10=ground truth, 11=report.
+no_report: true=skip PDF ("terminal only", "no report").
 """
 
 
 def _call_kimi_text(client: Any, user_message: str) -> str:
     """Make a text-only Kimi chat call and return the raw response string."""
     from config import (  # local import to keep module lightweight
-        KIMI_MAX_TOKENS,
         KIMI_THINKING,
+        PARSE_PROMPT_MAX_TOKENS,
         resolve_pipeline_ai_model_id,
     )
 
@@ -99,10 +65,13 @@ def _call_kimi_text(client: Any, user_message: str) -> str:
             {"role": "system", "content": _SYSTEM_PROMPT},
             {"role": "user", "content": user_message},
         ],
-        max_tokens=KIMI_MAX_TOKENS,
+        max_tokens=PARSE_PROMPT_MAX_TOKENS,
         response_format={"type": "json_object"},
         **extra,
     )
+    # kimi-k2.x rejects non-default temperature (400); other models benefit from 0 for JSON.
+    if not model.startswith("kimi-k2"):
+        kwargs["temperature"] = 0
 
     for attempt in range(1, 4):
         try:

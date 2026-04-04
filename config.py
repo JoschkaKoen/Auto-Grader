@@ -138,6 +138,9 @@ GEMINI_THINKING_BUDGET = 2048
 # Maximum tokens for Kimi response
 KIMI_MAX_TOKENS = 8192
 
+# Token cap for parse_prompt (JSON ~120 tokens; 512 is a safe ceiling).
+PARSE_PROMPT_MAX_TOKENS = 512
+
 # Enable extended thinking for kimi-k2.x models.
 # True  → model reasons step-by-step before answering (slower, uses more tokens).
 # False → thinking disabled; faster and cheaper, usually sufficient for OCR.
