@@ -62,10 +62,12 @@ The toolchain **never overwrites the original scan PDF**: `remove_blanks_autorot
 Point it at an exam folder containing the papers, answer key, class scan, and a `StudentList.xlsx`. Then describe what to grade in plain English.
 
 ```bash
-python xscore.py "check all multiple choice question answers"
-python xscore.py "count marks for each student" --folder "Space Physics Unit Test"
-python xscore.py "check the first 5 students' answers" --dpi 300
+python3 xscore.py "check all multiple choice question answers"
+python3 xscore.py "count marks for each student" --folder "Space Physics Unit Test"
+python3 xscore.py "check the first 5 students' answers" --dpi 300
 ```
+
+After `source .venv/bin/activate`, use **`python3`** if your shell says `command not found: python` (common on macOS). You can always run **`.venv/bin/python3 xscore.py …`** without activating.
 
 | Option | Description |
 |--------|-------------|

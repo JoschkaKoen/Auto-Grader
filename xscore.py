@@ -5,10 +5,10 @@ xscore.py
 Generic exam grading CLI — works on any exam, driven by a natural language prompt.
 
 Usage:
-    python xscore.py "check all multiple choice question answers"
-    python xscore.py "count marks for each student" --folder "Space Physics Unit Test"
-    python xscore.py "check the first 5 students' answers" --dpi 300
-    python xscore.py "check answers for Alice and Bob" --folder "Maths Mock"
+    python3 xscore.py "check all multiple choice question answers"
+    python3 xscore.py "count marks for each student" --folder "Space Physics Unit Test"
+    python3 xscore.py "check the first 5 students' answers" --dpi 300
+    python3 xscore.py "check answers for Alice and Bob" --folder "Maths Mock"
 
 The program will:
   1. Parse the natural language prompt into structured instructions (via Kimi).
