@@ -88,7 +88,6 @@ def _raster_with_spinner(label: str, fn, *, console) -> list:
             CompactElapsedColumn(),
             console=console,
             transient=True,
-            padding=(0, 0),
         ) as prog:
             prog.add_task(label, total=None)
             while not future.done():
@@ -232,7 +231,6 @@ def process_pdf(
             CompactElapsedColumn(),
             console=c,
             transient=False,
-            padding=(0, 0),
         ) as prog:
             task_id = prog.add_task("", total=len(futures))
             for future in as_completed(futures):

@@ -645,7 +645,6 @@ def deskew_pdf_raster(
                 CompactElapsedColumn(),
                 console=c,
                 transient=False,
-                padding=(0, 0),
             ) as prog:
                 task_id = prog.add_task("", total=n)
                 for fut in as_completed(futures):
