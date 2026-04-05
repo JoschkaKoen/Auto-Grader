@@ -10,6 +10,10 @@ Usage:
     python3 xscore.py "check the first 5 students' answers" --dpi 300
     python3 xscore.py "check answers for Alice and Bob" --folder "Maths Mock"
 
+    source .venv/bin/activate
+    python xscore.py "Grade files in Space Physics Unit Test, use 300 DPI, stop after step 10."
+    source .venv/bin/activate && python xscore.py "Grade files in Space Physics Unit Test, use 300 DPI, stop after step 10."
+
 The program will:
   1. Parse the natural language prompt into structured instructions (via Kimi).
   2. Locate the exam folder.
@@ -430,7 +434,6 @@ def _grade_scan_phases(ctx: _GradeCtx, gi: SimpleNamespace) -> None:
 
     if ctx.skip_clean_scan:
         gi.pipeline_step(5, "Detect blank pages")
-        gi.get_console().print()
         cleaned_here = ad / gi.CLEANED_SCAN_PDF
         legacy_cleaned = ctx.folder / gi.CLEANED_SCAN_PDF
         if cleaned_here.exists():
@@ -464,13 +467,11 @@ def _grade_scan_phases(ctx: _GradeCtx, gi: SimpleNamespace) -> None:
     )
     if cache_ok:
         gi.pipeline_step(5, "Detect blank pages")
-        gi.get_console().print()
         gi.info_line("Using cached cleaned scan (steps 5–10 skipped).")
         ctx.cleaned_pdf = cleaned_path
         return
 
     gi.pipeline_step(5, "Detect blank pages")
-    gi.get_console().print()
     gi.detect_blank_pages_phase(
         match,
         ad,
@@ -482,35 +483,30 @@ def _grade_scan_phases(ctx: _GradeCtx, gi: SimpleNamespace) -> None:
         raise SystemExit(0)
 
     gi.pipeline_step(6, "Autorotate")
-    gi.get_console().print()
     gi.autorotate_phase(ad, verbose=False)
     if ctx.through_step == 6:
         ctx.partial_stop_readme_step = ctx.through_step
         raise SystemExit(0)
 
     gi.pipeline_step(7, "Small angle correction")
-    gi.get_console().print()
     ctx.cleaned_pdf = gi.deskew_phase(ctx.folder, ad, dpi, verbose=False)
     if ctx.through_step == 7:
         ctx.partial_stop_readme_step = ctx.through_step
         raise SystemExit(0)
 
     gi.pipeline_step(8, "Detect page anchors")
-    gi.get_console().print()
     gi.detect_page_anchors_phase(ctx.folder, ad, dpi, verbose=False)
     if ctx.through_step == 8:
         ctx.partial_stop_readme_step = ctx.through_step
         raise SystemExit(0)
 
     gi.pipeline_step(9, "Calculate transformation")
-    gi.get_console().print()
     gi.compute_transformation_phase(ctx.folder, ad, dpi, verbose=False)
     if ctx.through_step == 9:
         ctx.partial_stop_readme_step = ctx.through_step
         raise SystemExit(0)
 
     gi.pipeline_step(10, "Project bounding boxes")
-    gi.get_console().print()
     gi.project_bounding_boxes_phase(ctx.folder, ad, dpi, verbose=False)
     if ctx.through_step == 10:
         ctx.partial_stop_readme_step = ctx.through_step
