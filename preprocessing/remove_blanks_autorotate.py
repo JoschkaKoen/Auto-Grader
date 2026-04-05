@@ -328,7 +328,11 @@ def write_rotated_pdf_after_blanks(
     else:
         if use_tesseract_rotation:
             rotated = sum(1 for a in rotation_map.values() if a != 0)
-            rot_s = f"{rotated} rotated" if rotated else "none rotated"
+            rot_s = (
+                f"{rotated} page(s) rotated (Tesseract OSD)"
+                if rotated
+                else "no rotation from Tesseract OSD (all pages 0°)"
+            )
         else:
             rots: list[int] = []
             for pn in content_page_nums:
@@ -337,9 +341,24 @@ def write_rotated_pdf_after_blanks(
                 else:
                     rots.append(_normalized_page_rotate(src_pdf.pages[pn - 1]))
             cnt = Counter(rots)
-            parts = [f"{n} at {deg}°" for deg, n in sorted(cnt.items())]
-            suffix = " (scanner, corrected)" if landscape_pages else " (scanner)"
-            rot_s = ", ".join(parts) + suffix
+            n_land = len(landscape_pages)
+            if len(cnt) == 1:
+                only_deg = next(iter(cnt))
+                n_at = cnt[only_deg]
+                if only_deg == 0 and n_land:
+                    rot_s = (
+                        f"all {n_at} output pages at 0° "
+                        f"({n_land} wide scan(s) set to portrait)"
+                    )
+                elif only_deg == 0:
+                    rot_s = f"all {n_at} pages at 0° (scanner /Rotate)"
+                else:
+                    rot_s = f"all {n_at} pages at {only_deg}° (scanner /Rotate)"
+            else:
+                parts = [f"{n} at {deg}°" for deg, n in sorted(cnt.items())]
+                rot_s = ", ".join(parts) + " (scanner /Rotate)"
+                if n_land:
+                    rot_s += f" · {n_land} wide scan(s) set to portrait"
 
     out_pdf = pikepdf.new()
 
@@ -373,8 +392,14 @@ def write_rotated_pdf_after_blanks(
     else:
         kept = len(content_page_nums)
         blanks = len(blank_page_nums)
-        page_s = f"{kept} of {total_pages}" if blanks else str(kept)
-        ok_line(f"{page_s} pages  ·  {rot_s}")
+        if blanks:
+            page_s = (
+                f"{kept} non-blank pages kept ({blanks} blank removed from "
+                f"{total_pages}-page scan)"
+            )
+        else:
+            page_s = f"{kept} pages"
+        ok_line(f"{page_s}  ·  {rot_s}")
 
 
 def scan_blanks_state_to_json(

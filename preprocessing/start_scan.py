@@ -109,8 +109,7 @@ def detect_blank_pages_phase(
     paths["blanks_json"].parent.mkdir(parents=True, exist_ok=True)
     paths["blanks_json"].write_text(body, encoding="utf-8")
     ok_line(
-        f"{len(content_page_nums)} content pages · {len(blank_page_nums)} blank "
-        f"(saved {SCAN_BLANKS_JSON})"
+        f"{len(content_page_nums)} content pages · {len(blank_page_nums)} blank"
     )
     return paths["blanks_json"]
 
