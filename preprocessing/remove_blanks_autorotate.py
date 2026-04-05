@@ -329,9 +329,9 @@ def write_rotated_pdf_after_blanks(
         if use_tesseract_rotation:
             rotated = sum(1 for a in rotation_map.values() if a != 0)
             rot_s = (
-                f"{rotated} page(s) rotated (Tesseract OSD)"
+                f"{rotated} page(s) rotated via Tesseract OSD"
                 if rotated
-                else "No rotation from Tesseract OSD (pages already upright)"
+                else "All pages already upright"
             )
         else:
             rots: list[int] = []
@@ -342,31 +342,21 @@ def write_rotated_pdf_after_blanks(
                     rots.append(_normalized_page_rotate(src_pdf.pages[pn - 1]))
             cnt = Counter(rots)
             n_land = len(landscape_pages)
-            if len(cnt) == 1:
+            n_kept = len(content_page_nums)
+            if n_land == n_kept:
+                rot_s = f"All {n_kept} pages corrected from landscape to portrait"
+            elif n_land:
+                rot_s = f"{n_land} of {n_kept} pages corrected from landscape to portrait"
+            elif len(cnt) == 1:
                 only_deg = next(iter(cnt))
-                n_at = cnt[only_deg]
-                if only_deg == 0 and n_land:
-                    if n_land == n_at:
-                        rot_s = (
-                            f"All pages at 0° · {n_land} wide-format scan(s) "
-                            f"straightened to portrait"
-                        )
-                    else:
-                        rot_s = (
-                            f"All pages at 0° · {n_land} of {n_at} were wide-format "
-                            f"and straightened to portrait"
-                        )
-                elif only_deg == 0:
-                    rot_s = f"All {n_at} pages at 0° (scanner /Rotate metadata)"
-                else:
-                    rot_s = f"All {n_at} pages at {only_deg}° (scanner /Rotate metadata)"
+                rot_s = (
+                    "All pages already upright"
+                    if only_deg == 0
+                    else f"All pages at {only_deg}°"
+                )
             else:
                 parts = [f"{n} at {deg}°" for deg, n in sorted(cnt.items())]
-                rot_s = "Page angles: " + ", ".join(parts) + " (scanner /Rotate)"
-                if n_land:
-                    rot_s += (
-                        f" · {n_land} wide-format page(s) straightened to portrait"
-                    )
+                rot_s = "Mixed orientation: " + ", ".join(parts)
 
     out_pdf = pikepdf.new()
 
@@ -401,12 +391,9 @@ def write_rotated_pdf_after_blanks(
         kept = len(content_page_nums)
         blanks = len(blank_page_nums)
         if blanks:
-            page_s = (
-                f"Kept {kept} pages · removed {blanks} blank "
-                f"({total_pages} pages in source scan)"
-            )
+            page_s = f"{kept} of {total_pages} pages  ·  {blanks} blank dropped"
         else:
-            page_s = f"Kept all {kept} pages (no blank pages)"
+            page_s = f"{kept} pages  ·  no blanks"
         ok_line(page_s)
         ok_line(rot_s)
 
