@@ -540,9 +540,8 @@ def detect_page_anchors_for_cleaned_scan(
     if not sidecar_path.is_file():
         raise FileNotFoundError(f"Missing anchor sidecar: {sidecar_path}")
 
-    from shared.terminal_ui import format_duration, get_console, info_line, ok_line
+    from shared.terminal_ui import format_duration, info_line, ok_line
 
-    c = get_console()
     data: list[dict] = json.loads(sidecar_path.read_text(encoding="utf-8"))
     n_side = len(data)
     if n_side == 0:
@@ -556,7 +555,6 @@ def detect_page_anchors_for_cleaned_scan(
     t0 = time.perf_counter()
     pages = convert_from_path(str(cleaned_pdf), **_pdf_kw)
     ok_line(f"Pages loaded · {format_duration(time.perf_counter() - t0)}")
-    c.print()
 
     n = len(pages)
     if n < n_side:

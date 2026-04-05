@@ -29,7 +29,6 @@ from PIL import Image
 from rich.progress import (
     BarColumn,
     Progress,
-    SpinnerColumn,
     TaskProgressColumn,
     TextColumn,
 )
@@ -131,25 +130,12 @@ def _rotation_map_from_tesseract_osd(
     return rotation_map
 
 
-def _raster_with_spinner(label: str, fn, *, console) -> list:
-    """Run *fn()* in a background thread, show a spinner, return the result."""
+def _raster_timed(label: str, fn) -> list:
+    """Run *fn()* and print a dim timing line (no progress animation)."""
     from shared.terminal_ui import format_duration, info_line
 
     t0 = time.perf_counter()
-    with ThreadPoolExecutor(max_workers=1) as ex:
-        future = ex.submit(fn)
-        with Progress(
-            TextColumn(" "),
-            SpinnerColumn(),
-            TextColumn(" {task.description}"),
-            CompactElapsedColumn(),
-            console=console,
-            transient=True,
-        ) as prog:
-            prog.add_task(label, total=None)
-            while not future.done():
-                time.sleep(0.05)
-    result = future.result()
+    result = fn()
     info_line(f"{label} · {format_duration(time.perf_counter() - t0)}")
     return result
 
@@ -162,19 +148,16 @@ def detect_blank_page_lists(
 ) -> tuple[int, list[int], list[int], list[tuple[int, int]]]:
     """Raster at :data:`BLANK_DPI`, classify pages; return counts and render sizes per page."""
     input_path = Path(input_path)
-    from shared.terminal_ui import get_console
 
     if not input_path.exists():
         raise FileNotFoundError(f"Input file not found: {input_path}")
 
-    c = get_console()
     _tc = os.cpu_count() or 4
-    low_res_pages = _raster_with_spinner(
+    low_res_pages = _raster_timed(
         f"Blank detection ({BLANK_DPI} DPI)",
         lambda: convert_from_path(
             str(input_path), dpi=BLANK_DPI, grayscale=True, thread_count=_tc
         ),
-        console=c,
     )
     total_pages = len(low_res_pages)
     content_page_nums: list[int] = []
@@ -229,7 +212,7 @@ def write_rotated_pdf_after_blanks(
     landscape_pages: set[int] = set()
 
     if use_tesseract_rotation:
-        hi_res_pages = _raster_with_spinner(
+        hi_res_pages = _raster_timed(
             f"Rotation detection ({analysis_dpi} DPI)",
             lambda: convert_from_path(
                 str(input_path),
@@ -237,7 +220,6 @@ def write_rotated_pdf_after_blanks(
                 grayscale=True,
                 thread_count=_tc,
             ),
-            console=c,
         )
 
         rotation_map = _rotation_map_from_tesseract_osd(
