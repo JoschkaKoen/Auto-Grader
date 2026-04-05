@@ -391,7 +391,7 @@ def write_rotated_pdf_after_blanks(
         kept = len(content_page_nums)
         blanks = len(blank_page_nums)
         if blanks:
-            page_s = f"{kept} of {total_pages} pages  ·  {blanks} blank dropped"
+            page_s = f"{kept} of {total_pages} pages  ·  {blanks} blank pages dropped"
         else:
             page_s = f"{kept} pages  ·  no blanks"
         ok_line(page_s)

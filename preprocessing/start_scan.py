@@ -266,7 +266,7 @@ def compute_transformation_phase(
         dpi=dpi,
         verbose=verbose,
     ):
-        ok_line("Calculated")
+        ok_line("Done")
         return transforms_path
     if transforms_path.is_file():
         transforms_path.unlink()
