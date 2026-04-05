@@ -637,9 +637,7 @@ def deskew_pdf_raster(
             "then Path.replace() if you need to update the original path."
         )
 
-    from shared.terminal_ui import format_duration, get_console, ok_line
-
-    c = get_console()
+    from shared.terminal_ui import format_duration, ok_line
     _pdf_kw = dict(
         dpi=dpi,
         grayscale=True,
@@ -663,7 +661,7 @@ def deskew_pdf_raster(
         for fut in as_completed(futures):
             page_idx, fixed_pil, top_angle, bot_angle, top_lines, bot_lines = fut.result()
             results[page_idx] = (fixed_pil, top_angle, bot_angle, top_lines, bot_lines)
-    ok_line(f"Correcting angle · {format_duration(time.perf_counter() - t_angle)}")
+    ok_line(f"Correcting angles · {format_duration(time.perf_counter() - t_angle)}")
 
     # Build sidecar JSON (ordered by page index). IGCSE anchors filled in step 8.
     null_anchors = {
@@ -689,7 +687,6 @@ def deskew_pdf_raster(
     )
     sidecar_path.write_text(json.dumps(reflines_data, indent=2))
 
-    c.print()
     t_write = time.perf_counter()
 
     from config import CLEANED_SCAN_EMBED_FORMAT, CLEANED_SCAN_JPEG_QUALITY
