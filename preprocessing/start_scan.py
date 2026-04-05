@@ -216,7 +216,7 @@ def compute_transformation_phase(
         write_scan_page_transforms_json,
     )
     from scaffold.generate_scaffold import _find_exam_pdf
-    from shared.terminal_ui import info_line, warn_line
+    from shared.terminal_ui import info_line, ok_line, warn_line
 
     paths = _scan_phase_paths(artifact_dir)
     deskewed = paths["cleaned"]
@@ -266,6 +266,7 @@ def compute_transformation_phase(
         dpi=dpi,
         verbose=verbose,
     ):
+        ok_line("Calculated")
         return transforms_path
     if transforms_path.is_file():
         transforms_path.unlink()
