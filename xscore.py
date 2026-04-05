@@ -30,6 +30,7 @@ import argparse
 import datetime
 import os
 import re
+import shlex
 import sys
 import time
 from dataclasses import dataclass
@@ -47,10 +48,13 @@ __version__ = "0.1"
 class _Tee:
     """Duplicate stdout to a log file, stripping ANSI colour codes from the file."""
 
-    def __init__(self, log_path: Path) -> None:
+    def __init__(self, log_path: Path, *, argv: list[str] | None = None) -> None:
         self._stdout = sys.stdout
         log_path.parent.mkdir(parents=True, exist_ok=True)
         self._log = log_path.open("w", encoding="utf-8")
+        cmd = shlex.join(argv if argv is not None else sys.argv)
+        self._log.write(f"Command: {cmd}\n\n")
+        self._log.flush()
 
     def write(self, text: str) -> int:
         self._stdout.write(text)
@@ -144,7 +148,7 @@ def main() -> None:
 
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     log_path = Path("logs") / f"{timestamp}.log"
-    tee = _Tee(log_path)
+    tee = _Tee(log_path, argv=sys.argv)
     sys.stdout = tee
     from rich.rule import Rule
 
