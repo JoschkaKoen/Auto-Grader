@@ -419,7 +419,9 @@ def _grade_step04_scaffold(ctx: _GradeCtx, gi: SimpleNamespace) -> None:
                 gi.warn_line("Removed cached scaffold (rebuild).")
 
     ctx.scaffold = gi.build_scaffold(ctx.folder, client=ctx.client, artifact_dir=ctx.artifact_dir)
-    gi.print_scaffold_summary(ctx.scaffold)
+    from shared.terminal_ui import pipeline_verbose
+    if pipeline_verbose():
+        gi.print_scaffold_summary(ctx.scaffold)
     if ctx.through_step == 4:
         ctx.partial_stop_readme_step = ctx.through_step
         raise SystemExit(0)

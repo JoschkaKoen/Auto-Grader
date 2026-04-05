@@ -576,7 +576,6 @@ def detect_page_anchors_for_cleaned_scan(
         tool_line("anchors", f"Rendering {cleaned_pdf.name} at {dpi} DPI …")
         pages = convert_from_path(str(cleaned_pdf), **_pdf_kw)
     else:
-        info_line("Detecting page anchors …")
         t0 = time.perf_counter()
         pages = convert_from_path(str(cleaned_pdf), **_pdf_kw)
         ok_line(f"Pages loaded · {format_duration(time.perf_counter() - t0)}")
@@ -711,7 +710,6 @@ def deskew_pdf_raster(
         )
         pages = convert_from_path(str(input_pdf), **_pdf_kw)
     else:
-        info_line("Loading pages …")
         t_load = time.perf_counter()
         pages = convert_from_path(str(input_pdf), **_pdf_kw)
         ok_line(f"Pages loaded · {format_duration(time.perf_counter() - t_load)}")
@@ -745,7 +743,6 @@ def deskew_pdf_raster(
                 tool_line("deskew", f"    ref-lines (after deskew)  top: {_lines_str(top_lines)}")
                 tool_line("deskew", f"    ref-lines (after deskew)  bot: {_lines_str(bot_lines)}")
         else:
-            info_line("Detecting small angle rotation …")
             with Progress(
                 TextColumn(PROGRESS_TASK_TEXT),
                 BarColumn(bar_width=28),
@@ -754,7 +751,7 @@ def deskew_pdf_raster(
                 console=c,
                 transient=False,
             ) as prog:
-                task_id = prog.add_task("", total=n)
+                task_id = prog.add_task("Correcting angle …", total=n)
                 for fut in as_completed(futures):
                     page_idx, fixed_pil, top_angle, bot_angle, top_lines, bot_lines = fut.result()
                     results[page_idx] = (fixed_pil, top_angle, bot_angle, top_lines, bot_lines)
@@ -792,7 +789,6 @@ def deskew_pdf_raster(
 
     if not verbose:
         c.print()
-        info_line("Writing cleaned scan …")
         t_write = time.perf_counter()
 
     from config import CLEANED_SCAN_EMBED_FORMAT, CLEANED_SCAN_JPEG_QUALITY

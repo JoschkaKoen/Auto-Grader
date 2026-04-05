@@ -351,7 +351,7 @@ def build_scaffold(
     *quiet*: when True, omit cache-hit log lines (e.g. projected overlay helper).
     """
     _ = client, dpi
-    from shared.terminal_ui import tool_line
+    from shared.terminal_ui import ok_line, tool_line
 
     ad = artifact_dir or exam_artifact_dir(folder, output_base)
 
@@ -433,8 +433,5 @@ def build_scaffold(
     out_pdf, n_rects, n_pages = write_scaffold_boxes_pdf(
         exam_pdf, questions, output_path=boxes_out
     )
-    tool_line(
-        "scaffold",
-        f"{len(leaves)} questions loaded · {total_marks} marks total",
-    )
+    ok_line(f"{len(leaves)} questions  ·  {total_marks} marks total")
     return scaffold

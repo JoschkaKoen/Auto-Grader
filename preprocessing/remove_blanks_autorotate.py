@@ -143,7 +143,7 @@ def _rotation_map_from_tesseract_osd(
 
 def _raster_with_spinner(label: str, fn, *, console) -> list:
     """Run *fn()* in a background thread, show a spinner, return the result."""
-    from shared.terminal_ui import format_duration, ok_line
+    from shared.terminal_ui import format_duration, info_line
 
     t0 = time.perf_counter()
     with ThreadPoolExecutor(max_workers=1) as ex:
@@ -160,7 +160,7 @@ def _raster_with_spinner(label: str, fn, *, console) -> list:
             while not future.done():
                 time.sleep(0.05)
     result = future.result()
-    ok_line(f"{label} · {format_duration(time.perf_counter() - t0)}")
+    info_line(f"{label} · {format_duration(time.perf_counter() - t0)}")
     return result
 
 
