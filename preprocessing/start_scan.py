@@ -14,6 +14,7 @@ PROJECTED_BOXES_SUFFIX = "_projected_boxes.pdf"
 PROJECTED_BOXES_JSON = "scan_projected_boxes.json"
 REFINED_BOXES_SUFFIX = "_refined_boxes.pdf"
 HANDWRITING_RESULTS_JSON = "scan_handwriting_results.json"
+YELLOW_CLEANED_SUFFIX = "_yellow_cleaned.pdf"
 
 
 def _scan_phase_paths(artifact_dir: Path) -> dict[str, Path]:
@@ -31,6 +32,7 @@ def _scan_phase_paths(artifact_dir: Path) -> dict[str, Path]:
         "projected_boxes_json": ad / PROJECTED_BOXES_JSON,
         "refined": out.with_name(out.stem + REFINED_BOXES_SUFFIX),
         "hw_results": ad / HANDWRITING_RESULTS_JSON,
+        "yellow_cleaned": out.with_name(out.stem + YELLOW_CLEANED_SUFFIX),
     }
 
 
@@ -363,17 +365,23 @@ def refine_bounding_boxes_phase(
     artifact_dir: Path,
     dpi: int,
     *,
-    pages_to_check: tuple[int, ...] = (0,),
+    pages_to_check: tuple[int, ...] | None = None,
+    ink_threshold: float = 0.0007,
+    min_blob_size: int = 15,
 ) -> Path | None:
     """Step 11: detect handwriting in yellow margin strips; draw red/green on refined PDF.
 
-    Crops each yellow bbox from the deskewed scan, runs PaddleOCR PPStructure to
-    detect handwriting, then draws red (handwriting present) or green (blank) outlines
-    on a copy of cleaned_scan_projected_boxes.pdf → cleaned_scan_refined_boxes.pdf.
+    Crops each yellow bbox from the deskewed scan, runs handwriting detection,
+    then draws red (handwriting present) or green (blank) outlines on a copy of
+    cleaned_scan_projected_boxes.pdf → cleaned_scan_refined_boxes.pdf.
 
     Args:
-        pages_to_check: Zero-based page indices to analyse. Defaults to page 0 only;
-                        pass ``tuple(range(n))`` to extend to all pages later.
+        pages_to_check: Zero-based page indices to analyse. Defaults to all pages.
+        ink_threshold:  Passed to the classical detector — fraction of pixels that
+                        must remain after line removal to count as handwriting.
+                        Lower = more sensitive. Default 0.001.
+        min_blob_size:  Minimum blob area (px²) kept after noise filtering.
+                        Lower = more sensitive. Default 15.
     """
     import json
 
@@ -383,6 +391,7 @@ def refine_bounding_boxes_phase(
         HWResult,
         detect_handwriting_in_rects,
         overlay_refined_boxes,
+        write_vlines_removed_pdf,
     )
     from scaffold.generate_scaffold import build_scaffold
     from scaffold.project_boxes_on_scanned_exam import (
@@ -421,6 +430,9 @@ def refine_bounding_boxes_phase(
     page_entries = payload["pages"]
     all_nodes = list(flatten_questions(scaffold.questions))
 
+    if pages_to_check is None:
+        pages_to_check = tuple(range(len(page_entries)))
+
     page_results: dict[int, list[HWResult]] = {}
 
     doc = fitz.open(str(cleaned))
@@ -436,7 +448,11 @@ def refine_bounding_boxes_phase(
         rects = compute_yellow_rects_for_page(
             page, all_nodes, top_tf, bot_tf, px_to_pt=px_to_pt
         )
-        hw_results = detect_handwriting_in_rects(cleaned, page_idx, rects, dpi_used)
+        hw_results = detect_handwriting_in_rects(
+            cleaned, page_idx, rects, dpi_used,
+            ink_threshold=ink_threshold,
+            min_blob_size=min_blob_size,
+        )
         page_results[page_idx] = hw_results
     doc.close()
 
@@ -453,6 +469,18 @@ def refine_bounding_boxes_phase(
     info_line(f"Saved {hw_json.name}")
 
     overlay_refined_boxes(projected, refined, page_results)
+    info_line(f"Saved {refined.name}")
+
+    boxes_json = paths["projected_boxes_json"]
+    if boxes_json.is_file():
+        write_vlines_removed_pdf(
+            cleaned,
+            boxes_json,
+            paths["yellow_cleaned"],
+            page_results,
+        )
+        info_line(f"Saved {paths['yellow_cleaned'].name}")
+
     return refined
 
 
