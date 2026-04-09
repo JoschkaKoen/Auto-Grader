@@ -115,13 +115,14 @@ When you run `xscore.py`, it executes these steps in order:
 | 7. Small angle correction | Per-half deskew; writes `cleaned_scan.pdf` and `cleaned_scan_anchors.json` (IGCSE anchor slots are filled in step 8) | `preprocessing/deskew.py` |
 | 8. Detect page anchors | Template-matches IGCSE headers into the sidecar; skipped with `--skip-clean-scan` | `preprocessing/deskew.py` |
 | 9. Calculate transformation | Writes `cleaned_scan_transforms.json` (4-up ↔ scan similarity per page) when a matching four-up raw exam exists | `scaffold/project_boxes_on_scanned_exam.py` |
-| 10. Project bounding boxes | Debug PDF `cleaned_scan_projected_boxes.pdf` from transforms (or legacy direct overlay); skipped with `--skip-clean-scan` | `scaffold/project_boxes_on_scanned_exam.py` |
-| 11. Detect student names | Kimi vision on each page; maps pages to roster entries | `marking/assign_pages_to_students.py` |
-| 12. Detect questions attempted | One Kimi call per page for attempted question numbers; used in step 13 to skip unanswered questions | `marking/detect_answered_questions.py` |
-| 13. Mark answers | Grades only attempted questions (`check_mc` / `check_answers` / `count_marks`; count_marks ignores step 12 filter) | `marking/grade_answers.py` |
-| 14. Compile results | Prints page assignments, marks table, and summaries in the terminal | `reports/print_results.py` |
-| 15. Check accuracy | If a ground-truth file exists, compares and prints per-student accuracy | `shared/load_ground_truth.py` |
-| 16. Compile report | LaTeX/PDF report; skipped with `--no-report` | `reports/generate_report.py` |
+| 10. Project bounding boxes | Debug PDF `cleaned_scan_projected_boxes.pdf` and `scan_projected_boxes.json` (exercise, eq-blank, and yellow rects per page) from transforms; skipped with `--skip-clean-scan` | `scaffold/project_boxes_on_scanned_exam.py` |
+| 11. Refine bounding boxes | Crops yellow margin strips from the scan, runs PaddleOCR PPStructureV3 (via `paddle_env` subprocess) to detect handwriting; writes `scan_handwriting_results.json` and `cleaned_scan_refined_boxes.pdf` (green = blank, red = handwriting); currently checks page 1 only | `scaffold/detect_handwriting.py`, `scaffold/paddle_worker.py` |
+| 12. Detect student names | Kimi vision on each page; maps pages to roster entries | `marking/assign_pages_to_students.py` |
+| 13. Detect questions attempted | One Kimi call per page for attempted question numbers; used in step 14 to skip unanswered questions | `marking/detect_answered_questions.py` |
+| 14. Mark answers | Grades only attempted questions (`check_mc` / `check_answers` / `count_marks`; count_marks ignores step 13 filter) | `marking/grade_answers.py` |
+| 15. Compile results | Prints page assignments, marks table, and summaries in the terminal | `reports/print_results.py` |
+| 16. Check accuracy | If a ground-truth file exists, compares and prints per-student accuracy | `shared/load_ground_truth.py` |
+| 17. Compile report | LaTeX/PDF report; skipped with `--no-report` | `reports/generate_report.py` |
 
 ---
 
