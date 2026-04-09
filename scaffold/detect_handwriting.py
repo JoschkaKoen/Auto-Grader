@@ -9,6 +9,7 @@ PaddleOCR runs in a dedicated paddle_env subprocess to avoid Python version conf
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import tempfile
 from dataclasses import dataclass
@@ -43,11 +44,16 @@ def _run_paddle_worker(crop_paths: list[Path]) -> list[bool]:
             f"paddle_env not found at {_PADDLE_PYTHON.parent.parent}. "
             "Create it with: python3 -m venv paddle_env && paddle_env/bin/pip install paddleocr"
         )
+    env = os.environ.copy()
+    env.setdefault("PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK", "True")
+    env.setdefault("HF_ENDPOINT", "https://hf-mirror.com")  # Chinese HuggingFace mirror
+
     result = subprocess.run(
         [str(_PADDLE_PYTHON), str(_WORKER)] + [str(p) for p in crop_paths],
         stdout=subprocess.PIPE,  # capture JSON result
         stderr=None,             # let paddle logs print directly to terminal
         text=True,
+        env=env,
     )
     if result.returncode != 0:
         raise RuntimeError(f"paddle_worker failed (exit {result.returncode})")
