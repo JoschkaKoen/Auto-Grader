@@ -375,7 +375,6 @@ def refine_bounding_boxes_phase(
     import json
 
     import fitz
-    from rich.progress import Progress
 
     from scaffold.detect_handwriting import (
         HWResult,
@@ -421,27 +420,22 @@ def refine_bounding_boxes_phase(
 
     page_results: dict[int, list[HWResult]] = {}
 
-    with Progress() as progress:
-        task = progress.add_task(
-            "Checking yellow strips for handwriting …", total=len(pages_to_check)
+    doc = fitz.open(str(cleaned))
+    for page_idx in pages_to_check:
+        if page_idx >= len(page_entries) or page_idx >= len(doc):
+            warn_line(f"Page {page_idx} out of range — skipping.")
+            continue
+        info_line(f"Checking yellow strips on page {page_idx + 1} for handwriting …")
+        pe = page_entries[page_idx]
+        top_tf = similarity_transform_from_dict(pe["top"])
+        bot_tf = similarity_transform_from_dict(pe["bot"])
+        page = doc[page_idx]
+        rects = compute_yellow_rects_for_page(
+            page, all_nodes, top_tf, bot_tf, px_to_pt=px_to_pt
         )
-        doc = fitz.open(str(cleaned))
-        for page_idx in pages_to_check:
-            if page_idx >= len(page_entries) or page_idx >= len(doc):
-                warn_line(f"Page {page_idx} out of range — skipping.")
-                progress.advance(task)
-                continue
-            pe = page_entries[page_idx]
-            top_tf = similarity_transform_from_dict(pe["top"])
-            bot_tf = similarity_transform_from_dict(pe["bot"])
-            page = doc[page_idx]
-            rects = compute_yellow_rects_for_page(
-                page, all_nodes, top_tf, bot_tf, px_to_pt=px_to_pt
-            )
-            hw_results = detect_handwriting_in_rects(cleaned, page_idx, rects, dpi_used)
-            page_results[page_idx] = hw_results
-            progress.advance(task)
-        doc.close()
+        hw_results = detect_handwriting_in_rects(cleaned, page_idx, rects, dpi_used)
+        page_results[page_idx] = hw_results
+    doc.close()
 
     serialisable = [
         {
