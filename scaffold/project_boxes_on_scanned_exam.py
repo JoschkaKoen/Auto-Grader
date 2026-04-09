@@ -710,36 +710,45 @@ def write_scan_page_transforms_json(
 _TOP_TRIM_PT = 20.0
 
 
-def _trim_first_exercise_per_column(
+def _trim_first_exercise_per_subpage(
     exercise: list[tuple[fitz.Rect, tuple[float, float, float]]],
     yellow: list[tuple[fitz.Rect, tuple[float, float, float]]],
     page_width: float,
+    page_height: float,
     trim_pt: float = _TOP_TRIM_PT,
 ) -> tuple[
     list[tuple[fitz.Rect, tuple[float, float, float]]],
     list[tuple[fitz.Rect, tuple[float, float, float]]],
 ]:
-    """Trim *trim_pt* from the top of the first exercise box in each column.
+    """Trim *trim_pt* from the top of the first exercise box in each subpage.
 
-    Each deskewed page contains two subpages (left / right column).  The
-    first exercise box in each column tends to include a header strip that
-    belongs to the page above, so we shave a small amount off the top.
+    Each deskewed PDF page contains all four 4-up subpages as quadrants:
+        subpage 1 (top-left)  | subpage 2 (top-right)
+        subpage 3 (bot-left)  | subpage 4 (bot-right)
+
+    The first exercise box in each quadrant tends to include a header strip
+    that belongs to the subpage above, so we shave a small amount off its top.
     The paired yellow margin box is trimmed by the same amount so the two
     boxes stay vertically aligned.
 
     Returns new (exercise, yellow) lists; originals are not mutated.
     """
     mid_x = page_width / 2.0
+    mid_y = page_height / 2.0
     exercise = list(exercise)
     yellow = list(yellow)
 
-    for col_filter in (
-        lambda cx: cx < mid_x,   # left column  → subpage 1 / 3
-        lambda cx: cx >= mid_x,  # right column → subpage 2 / 4
-    ):
+    quadrant_filters = [
+        (lambda cx, cy: cx <  mid_x and cy <  mid_y),  # subpage 1: top-left
+        (lambda cx, cy: cx >= mid_x and cy <  mid_y),  # subpage 2: top-right
+        (lambda cx, cy: cx <  mid_x and cy >= mid_y),  # subpage 3: bot-left
+        (lambda cx, cy: cx >= mid_x and cy >= mid_y),  # subpage 4: bot-right
+    ]
+
+    for q_filter in quadrant_filters:
         indices = [
             i for i, (r, _) in enumerate(exercise)
-            if col_filter((r.x0 + r.x1) / 2.0)
+            if q_filter((r.x0 + r.x1) / 2.0, (r.y0 + r.y1) / 2.0)
         ]
         if not indices:
             continue
@@ -748,7 +757,6 @@ def _trim_first_exercise_per_column(
         trimmed = fitz.Rect(r.x0, r.y0 + trim_pt, r.x1, r.y1)
         if not trimmed.is_empty:
             exercise[first_idx] = (trimmed, color)
-            # Trim the matching yellow box (same positional index) if present.
             if first_idx < len(yellow):
                 yr, yc = yellow[first_idx]
                 y_trimmed = fitz.Rect(yr.x0, yr.y0 + trim_pt, yr.x1, yr.y1)
@@ -851,8 +859,8 @@ def overlay_projected_scaffold_from_transforms_json(
             )
             yellow = [(yr, _YELLOW) for yr in yellow_rects]
 
-            exercise, yellow = _trim_first_exercise_per_column(
-                exercise, yellow, page.rect.width
+            exercise, yellow = _trim_first_exercise_per_subpage(
+                exercise, yellow, page.rect.width, page.rect.height
             )
             yellow_rects = [yr for yr, _ in yellow]
 
