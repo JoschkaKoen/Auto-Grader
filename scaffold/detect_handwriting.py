@@ -293,7 +293,8 @@ def write_vlines_removed_pdf(
                 )
             for hw in page_results.get(page_idx, []):
                 color = _RED if hw.has_handwriting else _GREEN
-                page_out.draw_rect(hw.rect, color=color, width=line_width)
+                dashes = "[4 4] 0" if hw.has_handwriting else None
+                page_out.draw_rect(hw.rect, color=color, width=line_width, dashes=dashes)
 
         doc_out.save(str(output_pdf), garbage=4, deflate=True)
     finally:
@@ -328,8 +329,138 @@ def overlay_refined_boxes(
         page = doc[page_idx]
         for hw in results:
             color = _RED if hw.has_handwriting else _GREEN
-            page.draw_rect(hw.rect, color=color, width=line_width)
+            dashes = "[4 4] 0" if hw.has_handwriting else None
+            page.draw_rect(hw.rect, color=color, width=line_width, dashes=dashes)
     doc.save(str(tmp), garbage=4, deflate=True)
     doc.close()
     tmp.replace(output_pdf)
+    return output_pdf
+
+
+# ---------------------------------------------------------------------------
+# Adjusted exercise boxes
+# ---------------------------------------------------------------------------
+
+def compute_adjusted_exercise_boxes_for_page(
+    page_data: dict,
+    hw_results: list[HWResult],
+) -> list[dict]:
+    """Merge or trim each exercise box based on handwriting detection in its margin strip.
+
+    For every exercise[i] / yellow[i] pair (same index, same vertical extent):
+    - Handwriting detected → expand the exercise rect to include the margin strip.
+    - No handwriting detected → keep the exercise rect unchanged (margin discarded).
+
+    Args:
+        page_data:   One page entry from ``scan_projected_boxes.json``
+                     (must have ``"exercise"`` and ``"yellow"`` lists).
+        hw_results:  Handwriting results for this page, one per yellow rect,
+                     in the same order as the ``"yellow"`` list.
+
+    Returns:
+        List of dicts: ``{rect, color, expanded}`` — one per exercise box.
+    """
+    exercise_list = page_data.get("exercise", [])
+    yellow_list = page_data.get("yellow", [])
+    adjusted: list[dict] = []
+    for ex_entry, yw_entry, hw in zip(exercise_list, yellow_list, hw_results):
+        ex_rect = fitz.Rect(ex_entry["rect"])
+        if hw.has_handwriting:
+            yw_rect = fitz.Rect(yw_entry["rect"])
+            merged = ex_rect.include_rect(yw_rect)
+            adjusted.append({
+                "rect": [merged.x0, merged.y0, merged.x1, merged.y1],
+                "color": ex_entry["color"],
+                "expanded": True,
+            })
+        else:
+            adjusted.append({
+                "rect": ex_entry["rect"],
+                "color": ex_entry["color"],
+                "expanded": False,
+            })
+    return adjusted
+
+
+def write_adjusted_exercise_pdf(
+    scan_pdf: Path,
+    projected_boxes_json: Path,
+    output_pdf: Path,
+    adjusted_data: dict[int, list[dict]],
+    *,
+    dpi: int = 300,
+    line_width: float = 0.9,
+) -> Path:
+    """Write a PDF showing only the adjusted exercise boxes on the cleaned scan.
+
+    Identical base processing to ``write_vlines_removed_pdf`` (vertical lines
+    erased inside yellow strips), but only the adjusted exercise boxes are drawn —
+    no yellow overlays, no teal equation boxes.
+
+    Args:
+        scan_pdf:             ``cleaned_scan.pdf`` — deskewed base scan.
+        projected_boxes_json: ``scan_projected_boxes.json`` from step 10.
+        output_pdf:           Destination path.
+        adjusted_data:        Mapping of page_idx → adjusted exercise entries
+                              from ``compute_adjusted_exercise_boxes_for_page``.
+        dpi:                  Raster DPI matching the scan.
+        line_width:           Stroke width for exercise box outlines (points).
+
+    Returns:
+        *output_pdf* after atomic save.
+    """
+    payload = json.loads(Path(projected_boxes_json).read_text(encoding="utf-8"))
+    dpi = int(payload.get("dpi", dpi))
+    px_to_pt = 72.0 / dpi
+    pages_data: list[dict] = payload.get("pages") or []
+
+    doc_in = fitz.open(str(scan_pdf))
+    doc_out = fitz.open()
+    try:
+        for pd in pages_data:
+            page_idx = int(pd["page_idx"])
+            if page_idx >= len(doc_in):
+                continue
+
+            page_in = doc_in[page_idx]
+            mat = fitz.Matrix(dpi / 72, dpi / 72)
+            pix = page_in.get_pixmap(matrix=mat, colorspace=fitz.csRGB)
+            img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(
+                pix.height, pix.width, 3
+            )
+            img_bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+
+            # Erase vertical lines inside every original yellow strip
+            for entry in pd.get("yellow", []):
+                rx0, ry0, rx1, ry1 = entry["rect"]
+                x0 = max(0, int(rx0 / px_to_pt))
+                y0 = max(0, int(ry0 / px_to_pt))
+                x1 = min(pix.width, int(rx1 / px_to_pt))
+                y1 = min(pix.height, int(ry1 / px_to_pt))
+                if x1 > x0 and y1 > y0:
+                    img_bgr[y0:y1, x0:x1] = _erase_vertical_lines_from_crop(
+                        img_bgr[y0:y1, x0:x1]
+                    )
+
+            img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+            _, jpg_bytes = cv2.imencode(".jpg", img_rgb, [cv2.IMWRITE_JPEG_QUALITY, 95])
+
+            page_out = doc_out.new_page(
+                width=page_in.rect.width, height=page_in.rect.height
+            )
+            page_out.insert_image(page_out.rect, stream=jpg_bytes.tobytes())
+
+            # Draw only the adjusted exercise boxes for this page
+            for entry in adjusted_data.get(page_idx, []):
+                page_out.draw_rect(
+                    fitz.Rect(entry["rect"]),
+                    color=tuple(entry["color"]),
+                    width=line_width,
+                )
+
+        doc_out.save(str(output_pdf), garbage=4, deflate=True)
+    finally:
+        doc_in.close()
+        doc_out.close()
+
     return output_pdf

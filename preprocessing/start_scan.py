@@ -15,6 +15,8 @@ PROJECTED_BOXES_JSON = "scan_projected_boxes.json"
 REFINED_BOXES_SUFFIX = "_refined_boxes.pdf"
 HANDWRITING_RESULTS_JSON = "scan_handwriting_results.json"
 YELLOW_CLEANED_SUFFIX = "_yellow_cleaned.pdf"
+ADJUSTED_EXERCISE_JSON = "scan_adjusted_exercise_boxes.json"
+ADJUSTED_EXERCISE_SUFFIX = "_adjusted_exercise.pdf"
 
 
 def _scan_phase_paths(artifact_dir: Path) -> dict[str, Path]:
@@ -33,6 +35,8 @@ def _scan_phase_paths(artifact_dir: Path) -> dict[str, Path]:
         "refined": out.with_name(out.stem + REFINED_BOXES_SUFFIX),
         "hw_results": ad / HANDWRITING_RESULTS_JSON,
         "yellow_cleaned": out.with_name(out.stem + YELLOW_CLEANED_SUFFIX),
+        "adjusted_exercise_json": ad / ADJUSTED_EXERCISE_JSON,
+        "adjusted_exercise_pdf": out.with_name(out.stem + ADJUSTED_EXERCISE_SUFFIX),
     }
 
 
@@ -389,8 +393,10 @@ def refine_bounding_boxes_phase(
 
     from scaffold.detect_handwriting import (
         HWResult,
+        compute_adjusted_exercise_boxes_for_page,
         detect_handwriting_in_rects,
         overlay_refined_boxes,
+        write_adjusted_exercise_pdf,
         write_vlines_removed_pdf,
     )
     from scaffold.generate_scaffold import build_scaffold
@@ -480,6 +486,40 @@ def refine_bounding_boxes_phase(
             page_results,
         )
         info_line(f"Saved {paths['yellow_cleaned'].name}")
+
+        # Compute adjusted exercise boxes: expand where handwriting found, else keep.
+        import json as _json
+        projected_payload = _json.loads(boxes_json.read_text())
+        pages_data = projected_payload.get("pages") or []
+
+        adjusted_data: dict[int, list[dict]] = {}
+        for pd in pages_data:
+            page_idx = int(pd["page_idx"])
+            hw = page_results.get(page_idx, [])
+            adjusted_data[page_idx] = compute_adjusted_exercise_boxes_for_page(pd, hw)
+
+        # Save adjusted exercise boxes JSON
+        adj_json_payload = {
+            "dpi": projected_payload.get("dpi", dpi_used),
+            "pages": [
+                {"page_idx": page_idx, "adjusted_exercise": entries}
+                for page_idx, entries in sorted(adjusted_data.items())
+            ],
+        }
+        paths["adjusted_exercise_json"].write_text(
+            _json.dumps(adj_json_payload, indent=2)
+        )
+        info_line(f"Saved {paths['adjusted_exercise_json'].name}")
+
+        # Write PDF with only the adjusted exercise boxes on the cleaned scan
+        write_adjusted_exercise_pdf(
+            cleaned,
+            boxes_json,
+            paths["adjusted_exercise_pdf"],
+            adjusted_data,
+            dpi=dpi_used,
+        )
+        info_line(f"Saved {paths['adjusted_exercise_pdf'].name}")
 
     return refined
 
