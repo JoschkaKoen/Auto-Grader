@@ -380,10 +380,9 @@ def refine_bounding_boxes_phase(
     from scaffold.detect_handwriting import (
         HWResult,
         detect_handwriting_in_rects,
-        make_engine,
         overlay_refined_boxes,
     )
-    from scaffold.generate_scaffold import _find_exam_pdf, build_scaffold
+    from scaffold.generate_scaffold import build_scaffold
     from scaffold.project_boxes_on_scanned_exam import (
         compute_yellow_rects_for_page,
         similarity_transform_from_dict,
@@ -420,7 +419,6 @@ def refine_bounding_boxes_phase(
     page_entries = payload["pages"]
     all_nodes = list(flatten_questions(scaffold.questions))
 
-    engine = make_engine()
     page_results: dict[int, list[HWResult]] = {}
 
     with Progress() as progress:
@@ -440,9 +438,7 @@ def refine_bounding_boxes_phase(
             rects = compute_yellow_rects_for_page(
                 page, all_nodes, top_tf, bot_tf, px_to_pt=px_to_pt
             )
-            hw_results = detect_handwriting_in_rects(
-                cleaned, page_idx, rects, dpi_used, engine
-            )
+            hw_results = detect_handwriting_in_rects(cleaned, page_idx, rects, dpi_used)
             page_results[page_idx] = hw_results
             progress.advance(task)
         doc.close()

@@ -2,20 +2,28 @@
 
 Step 11 uses this to classify each yellow bbox as containing student handwriting
 (red overlay) or blank (green overlay), producing cleaned_scan_refined_boxes.pdf.
+
+PaddleOCR runs in a dedicated paddle_env subprocess to avoid Python version conflicts.
 """
 
 from __future__ import annotations
 
+import json
+import subprocess
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
 import cv2
 import fitz
 import numpy as np
-from paddleocr import PPStructure
 
 _GREEN: tuple[float, float, float] = (0.0, 0.75, 0.2)
 _RED: tuple[float, float, float] = (0.9, 0.1, 0.1)
+
+# paddle_env lives alongside the project root.
+_PADDLE_PYTHON = Path(__file__).parent.parent / "paddle_env" / "bin" / "python"
+_WORKER = Path(__file__).parent / "paddle_worker.py"
 
 
 @dataclass
@@ -24,13 +32,27 @@ class HWResult:
     has_handwriting: bool
 
 
-def make_engine() -> PPStructure:
-    """Initialize the PPStructure layout engine.
+def _run_paddle_worker(crop_paths: list[Path]) -> list[bool]:
+    """Call the paddle_worker subprocess with a batch of image paths.
 
-    Expensive on first call (downloads models ~1–2 GB). Initialize once and
-    reuse across all crops.
+    Returns one bool per path: True if handwriting was detected.
+    Raises RuntimeError if the subprocess fails.
     """
-    return PPStructure(layout=True, show_log=False, lang="en")
+    if not _PADDLE_PYTHON.exists():
+        raise FileNotFoundError(
+            f"paddle_env not found at {_PADDLE_PYTHON.parent.parent}. "
+            "Create it with: python3 -m venv paddle_env && paddle_env/bin/pip install paddleocr"
+        )
+    result = subprocess.run(
+        [str(_PADDLE_PYTHON), str(_WORKER)] + [str(p) for p in crop_paths],
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"paddle_worker failed (exit {result.returncode}):\n{result.stderr}"
+        )
+    return json.loads(result.stdout)
 
 
 def detect_handwriting_in_rects(
@@ -38,24 +60,20 @@ def detect_handwriting_in_rects(
     page_idx: int,
     rects: list[fitz.Rect],
     dpi: int,
-    engine: PPStructure,
 ) -> list[HWResult]:
-    """Rasterize one PDF page, crop each rect, run PPStructure, return results.
+    """Rasterize one PDF page, crop each rect, run PaddleOCR via subprocess.
 
     Args:
         scan_pdf:  Path to the deskewed scan PDF (cleaned_scan.pdf).
         page_idx:  Zero-based page index to rasterize.
-        rects:     Yellow margin-strip rects in PDF points (from
-                   compute_yellow_rects_for_page).
+        rects:     Yellow margin-strip rects in PDF points.
         dpi:       Raster DPI — must match the DPI used to build the transforms.
-        engine:    A PPStructure instance from make_engine().
 
     Returns:
         One HWResult per input rect, in the same order.
     """
     mat = fitz.Matrix(dpi / 72, dpi / 72)
     doc = fitz.open(str(scan_pdf))
-    # Force RGB (3 channels) so the numpy reshape and cv2 conversion are always valid.
     pix = doc[page_idx].get_pixmap(matrix=mat, colorspace=fitz.csRGB)
     doc.close()
 
@@ -63,18 +81,29 @@ def detect_handwriting_in_rects(
     img_bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
 
     px_to_pt = 72.0 / dpi
-    results: list[HWResult] = []
-    for rect in rects:
-        x0 = max(0, int(rect.x0 / px_to_pt))
-        y0 = max(0, int(rect.y0 / px_to_pt))
-        x1 = min(pix.width, int(rect.x1 / px_to_pt))
-        y1 = min(pix.height, int(rect.y1 / px_to_pt))
-        crop = img_bgr[y0:y1, x0:x1]
-        if crop.size == 0:
-            results.append(HWResult(rect, has_handwriting=False))
-            continue
-        hw = any(region["type"] == "handwriting" for region in engine(crop))
-        results.append(HWResult(rect, has_handwriting=hw))
+    crop_paths: list[Path] = []
+    valid_indices: list[int] = []
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_dir = Path(tmp)
+        for i, rect in enumerate(rects):
+            x0 = max(0, int(rect.x0 / px_to_pt))
+            y0 = max(0, int(rect.y0 / px_to_pt))
+            x1 = min(pix.width, int(rect.x1 / px_to_pt))
+            y1 = min(pix.height, int(rect.y1 / px_to_pt))
+            crop = img_bgr[y0:y1, x0:x1]
+            if crop.size == 0:
+                continue
+            crop_path = tmp_dir / f"crop_{i}.png"
+            cv2.imwrite(str(crop_path), crop)
+            crop_paths.append(crop_path)
+            valid_indices.append(i)
+
+        hw_flags = _run_paddle_worker(crop_paths) if crop_paths else []
+
+    results: list[HWResult] = [HWResult(rect, has_handwriting=False) for rect in rects]
+    for flag, idx in zip(hw_flags, valid_indices):
+        results[idx] = HWResult(rects[idx], has_handwriting=flag)
     return results
 
 
