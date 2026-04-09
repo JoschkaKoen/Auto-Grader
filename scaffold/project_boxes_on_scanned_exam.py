@@ -707,6 +707,57 @@ def write_scan_page_transforms_json(
     return True
 
 
+_TOP_TRIM_PT = 20.0
+
+
+def _trim_first_exercise_per_column(
+    exercise: list[tuple[fitz.Rect, tuple[float, float, float]]],
+    yellow: list[tuple[fitz.Rect, tuple[float, float, float]]],
+    page_width: float,
+    trim_pt: float = _TOP_TRIM_PT,
+) -> tuple[
+    list[tuple[fitz.Rect, tuple[float, float, float]]],
+    list[tuple[fitz.Rect, tuple[float, float, float]]],
+]:
+    """Trim *trim_pt* from the top of the first exercise box in each column.
+
+    Each deskewed page contains two subpages (left / right column).  The
+    first exercise box in each column tends to include a header strip that
+    belongs to the page above, so we shave a small amount off the top.
+    The paired yellow margin box is trimmed by the same amount so the two
+    boxes stay vertically aligned.
+
+    Returns new (exercise, yellow) lists; originals are not mutated.
+    """
+    mid_x = page_width / 2.0
+    exercise = list(exercise)
+    yellow = list(yellow)
+
+    for col_filter in (
+        lambda cx: cx < mid_x,   # left column  → subpage 1 / 3
+        lambda cx: cx >= mid_x,  # right column → subpage 2 / 4
+    ):
+        indices = [
+            i for i, (r, _) in enumerate(exercise)
+            if col_filter((r.x0 + r.x1) / 2.0)
+        ]
+        if not indices:
+            continue
+        first_idx = min(indices, key=lambda i: exercise[i][0].y0)
+        r, color = exercise[first_idx]
+        trimmed = fitz.Rect(r.x0, r.y0 + trim_pt, r.x1, r.y1)
+        if not trimmed.is_empty:
+            exercise[first_idx] = (trimmed, color)
+            # Trim the matching yellow box (same positional index) if present.
+            if first_idx < len(yellow):
+                yr, yc = yellow[first_idx]
+                y_trimmed = fitz.Rect(yr.x0, yr.y0 + trim_pt, yr.x1, yr.y1)
+                if not y_trimmed.is_empty:
+                    yellow[first_idx] = (y_trimmed, yc)
+
+    return exercise, yellow
+
+
 def overlay_projected_scaffold_from_transforms_json(
     deskewed_pdf: Path,
     transforms_json: Path,
@@ -799,6 +850,11 @@ def overlay_projected_scaffold_from_transforms_json(
                 mid_y_pt=file_mid,
             )
             yellow = [(yr, _YELLOW) for yr in yellow_rects]
+
+            exercise, yellow = _trim_first_exercise_per_column(
+                exercise, yellow, page.rect.width
+            )
+            yellow_rects = [yr for yr, _ in yellow]
 
             for r, color in exercise + eq_blank + yellow:
                 page.draw_rect(r, color=color, width=line_width)
