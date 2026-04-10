@@ -11,8 +11,8 @@ Usage:
     python3 xscore.py "check answers for Alice and Bob" --folder "Maths Mock"
 
     source .venv/bin/activate
-    python xscore.py "Grade files in Space Physics Unit Test, use 300 DPI, stop after step 10."
-    source .venv/bin/activate && python xscore.py "Grade files in Space Physics Unit Test, use 300 DPI, stop after step 10."
+    python xscore.py "Grade files in Space Physics Unit Test, use 300 DPI, stop after step 12."
+    source .venv/bin/activate && python xscore.py "Grade files in Space Physics Unit Test, use 300 DPI, stop after step 12."
 
 The program will:
   1. Parse the natural language prompt into structured instructions (via Kimi).
@@ -676,8 +676,8 @@ def _grade_step18_report(ctx: _GradeCtx, gi: SimpleNamespace) -> None:
     assert ctx.run_dir is not None
     gi.pipeline_step(18, "Compile report")
     if not ctx.no_report:
-        output_tex = ctx.run_dir / "grade_report.tex"
-        output_pdf = ctx.run_dir / "grade_report.pdf"
+        output_tex = ctx.run_dir / "8_grade_report.tex"
+        output_pdf = ctx.run_dir / "8_grade_report.pdf"
         title = f"{ctx.folder.name} — Grading Report"
         gi.generate_report(
             scaffold=ctx.scaffold,

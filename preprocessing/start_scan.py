@@ -5,38 +5,39 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-# Phased pipeline artifacts (steps 5–11 scan block in xscore.py README).
-SCAN_BLANKS_JSON = "scan_blanks.json"
-SCAN_ROTATED_PDF = "scan_rotated.pdf"
-CLEANED_SCAN_PDF = "cleaned_scan.pdf"
-CLEANED_SCAN_TRANSFORMS_JSON = "cleaned_scan_transforms.json"
-VLINES_REMOVED_SUFFIX = "_vertical_lines_removed.pdf"
-PROJECTED_BOXES_SUFFIX = "_projected_boxes.pdf"
-PROJECTED_BOXES_JSON = "scan_projected_boxes.json"
-REFINED_BOXES_SUFFIX = "_refined_boxes.pdf"
-HANDWRITING_RESULTS_JSON = "scan_handwriting_results.json"
-ADJUSTED_EXERCISE_JSON = "scan_adjusted_exercise_boxes.json"
-ADJUSTED_EXERCISE_SUFFIX = "_adjusted_exercise.pdf"
+# Phased pipeline artifacts (steps 5–12 scan block in xscore.py README).
+SCAN_BLANKS_JSON          = "2_scan_blanks.json"
+SCAN_ROTATED_PDF          = "2_scan_rotated.pdf"
+CLEANED_SCAN_PDF          = "3_cleaned_scan.pdf"
+SCAN_ANCHORS_JSON         = "3_scan_anchors.json"
+SCAN_TRANSFORMS_JSON      = "4_scan_transforms.json"
+SCAN_LINES_REMOVED_PDF    = "4_scan_lines_removed.pdf"
+SCAN_BOXES_PROJECTED_PDF  = "5_scan_boxes_projected.pdf"
+SCAN_BOXES_PROJECTED_JSON = "5_scan_boxes_projected.json"
+SCAN_BOXES_REFINED_PDF    = "6_scan_boxes_refined.pdf"
+SCAN_HANDWRITING_JSON     = "6_scan_handwriting.json"
+SCAN_EXERCISE_BOXES_JSON  = "7_scan_exercise_boxes.json"
+SCAN_EXERCISE_BOXES_PDF   = "7_scan_exercise_boxes.pdf"
 
 
 def _scan_phase_paths(artifact_dir: Path) -> dict[str, Path]:
     ad = artifact_dir
-    out = ad / CLEANED_SCAN_PDF
+    out = ad / CLEANED_SCAN_PDF  # stem still used for transient paths only
     return {
-        "blanks_json": ad / SCAN_BLANKS_JSON,
-        "rotated": ad / SCAN_ROTATED_PDF,
-        "cleaned": out,
-        "sidecar": out.with_name(f"{out.stem}_anchors.json"),
-        "sidecar_legacy": out.with_name(f"{out.stem}_reflines.json"),
-        "deskew_tmp": ad / f"{out.stem}_deskew_tmp{out.suffix}",
-        "transforms": ad / CLEANED_SCAN_TRANSFORMS_JSON,
-        "vlines_removed": out.with_name(out.stem + VLINES_REMOVED_SUFFIX),
-        "projected": out.with_name(out.stem + PROJECTED_BOXES_SUFFIX),
-        "projected_boxes_json": ad / PROJECTED_BOXES_JSON,
-        "refined": out.with_name(out.stem + REFINED_BOXES_SUFFIX),
-        "hw_results": ad / HANDWRITING_RESULTS_JSON,
-        "adjusted_exercise_json": ad / ADJUSTED_EXERCISE_JSON,
-        "adjusted_exercise_pdf": out.with_name(out.stem + ADJUSTED_EXERCISE_SUFFIX),
+        "blanks_json":            ad / SCAN_BLANKS_JSON,
+        "rotated":                ad / SCAN_ROTATED_PDF,
+        "cleaned":                ad / CLEANED_SCAN_PDF,
+        "sidecar":                ad / SCAN_ANCHORS_JSON,
+        "sidecar_legacy":         out.with_name(f"{out.stem}_reflines.json"),  # transient
+        "deskew_tmp":             ad / f"{out.stem}_deskew_tmp{out.suffix}",   # transient
+        "transforms":             ad / SCAN_TRANSFORMS_JSON,
+        "vlines_removed":         ad / SCAN_LINES_REMOVED_PDF,
+        "projected":              ad / SCAN_BOXES_PROJECTED_PDF,
+        "projected_boxes_json":   ad / SCAN_BOXES_PROJECTED_JSON,
+        "refined":                ad / SCAN_BOXES_REFINED_PDF,
+        "hw_results":             ad / SCAN_HANDWRITING_JSON,
+        "adjusted_exercise_json": ad / SCAN_EXERCISE_BOXES_JSON,
+        "adjusted_exercise_pdf":  ad / SCAN_EXERCISE_BOXES_PDF,
     }
 
 

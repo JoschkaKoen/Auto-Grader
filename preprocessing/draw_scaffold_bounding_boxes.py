@@ -107,8 +107,9 @@ def write_projected_scaffold_debug_pdf(
         )
         return None
 
-    out = deskewed_pdf.with_name(deskewed_pdf.stem + "_projected_boxes.pdf")
-    transforms_path = deskewed_pdf.with_name(deskewed_pdf.stem + "_transforms.json")
+    from preprocessing.start_scan import SCAN_BOXES_PROJECTED_PDF, SCAN_TRANSFORMS_JSON
+    out = deskewed_pdf.parent / SCAN_BOXES_PROJECTED_PDF
+    transforms_path = deskewed_pdf.parent / SCAN_TRANSFORMS_JSON
     try:
         if write_scan_page_transforms_json(
             raw4,

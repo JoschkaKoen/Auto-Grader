@@ -22,7 +22,7 @@ def exam_artifact_dir(exam_folder: Path, output_base: str | Path = "output") -> 
 
 def artifact_scaffold_json_path(artifact_dir: Path) -> Path:
     """Canonical scaffold cache JSON in the run folder."""
-    return artifact_dir / "scaffold.json"
+    return artifact_dir / "1_scaffold.json"
 
 
 def artifact_scaffold_markdown_path(artifact_dir: Path) -> Path:
@@ -42,7 +42,7 @@ def legacy_artifact_scaffold_cache_path(artifact_dir: Path) -> Path:
 
 def artifact_scaffold_boxes_path(artifact_dir: Path) -> Path:
     """Vector-exam PDF with scaffold rectangles drawn (one file per run)."""
-    return artifact_dir / "raw_exam_bboxes.pdf"
+    return artifact_dir / "1_exam_bboxes.pdf"
 
 
 def extract_answers_output_dir(
@@ -52,14 +52,14 @@ def extract_answers_output_dir(
     return Path(output_base) / "extract_answers" / safe_path_stem(pdf_stem)
 
 
-CLEANED_SCAN_PDF = "cleaned_scan.pdf"
+CLEANED_SCAN_PDF = "3_cleaned_scan.pdf"
 
 
 def find_latest_cleaned_scan(
     exam_folder: Path,
     output_base: str | Path = "output",
 ) -> Path | None:
-    """Return the newest ``cleaned_scan.pdf`` among known layouts, or ``None``.
+    """Return the newest ``3_cleaned_scan.pdf`` among known layouts, or ``None``.
 
     Searches (all must exist as files to be candidates):
 

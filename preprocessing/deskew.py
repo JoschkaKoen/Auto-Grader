@@ -504,8 +504,8 @@ def _lines_str(lines: list[ReferenceLine]) -> str:
 
 def anchors_sidecar_path(deskewed_pdf: Path) -> Path:
     """Path for the IGCSE anchor sidecar next to a deskewed raster PDF."""
-    p = Path(deskewed_pdf)
-    return p.with_name(p.stem + "_anchors.json")
+    from preprocessing.start_scan import SCAN_ANCHORS_JSON
+    return Path(deskewed_pdf).parent / SCAN_ANCHORS_JSON
 
 
 def resolve_deskew_sidecar(deskewed_pdf: Path) -> Path | None:

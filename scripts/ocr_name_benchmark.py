@@ -13,7 +13,7 @@ System: ``brew install tesseract`` (see main README).
 
 Usage:
     python3 scripts/ocr_name_benchmark.py --folder \"path/to/exam\"
-    python3 scripts/ocr_name_benchmark.py --folder \"...\" --pdf path/to/cleaned_scan.pdf
+    python3 scripts/ocr_name_benchmark.py --folder \"...\" --pdf path/to/3_cleaned_scan.pdf
 """
 
 from __future__ import annotations
@@ -199,9 +199,9 @@ def run_paddleocr(pil_img: Image.Image) -> str:
 def search_paths_hint(exam_folder: Path, output_base: Path) -> str:
     stem = exam_folder.name.replace(" ", "_")
     return (
-        f"  {output_base / stem / 'cleaned_scan.pdf'}\n"
-        f"  {output_base / stem}/*/cleaned_scan.pdf\n"
-        f"  {exam_folder / 'cleaned_scan.pdf'}"
+        f"  {output_base / stem / '3_cleaned_scan.pdf'}\n"
+        f"  {output_base / stem}/*/3_cleaned_scan.pdf\n"
+        f"  {exam_folder / '3_cleaned_scan.pdf'}"
     )
 
 
@@ -290,7 +290,7 @@ def main() -> None:
         required=True,
         help="Exam folder containing StudentList.xlsx",
     )
-    ap.add_argument("--pdf", type=Path, default=None, help="Override PDF (default: latest cleaned_scan.pdf)")
+    ap.add_argument("--pdf", type=Path, default=None, help="Override PDF (default: latest 3_cleaned_scan.pdf)")
     ap.add_argument("--dpi", type=int, default=DEFAULT_DPI, help=f"Render DPI (default {DEFAULT_DPI})")
     ap.add_argument("--page", type=int, default=0, help="PDF page index (0-based)")
     ap.add_argument("--output-base", type=Path, default=Path("output"), help="Output tree root (default output)")
@@ -322,10 +322,10 @@ def main() -> None:
         found = find_latest_cleaned_scan(folder, output_base=args.output_base)
         if found is None:
             console.print(
-                "[red]No cleaned_scan.pdf found.[/red] Searched:\n"
+                "[red]No 3_cleaned_scan.pdf found.[/red] Searched:\n"
                 + search_paths_hint(folder, args.output_base.expanduser().resolve())
             )
-            console.print("\n[yellow]Tip:[/yellow] pass --pdf path/to/cleaned_scan.pdf or run from repo root.")
+            console.print("\n[yellow]Tip:[/yellow] pass --pdf path/to/3_cleaned_scan.pdf or run from repo root.")
             raise SystemExit(1)
         pdf = found
     else:
