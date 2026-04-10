@@ -87,7 +87,7 @@ After `source .venv/bin/activate`, use **`python3`** if your shell says `command
 | `--skip-clean-scan` | Skip class-scan prep; use `cleaned_scan.pdf` in the current run folder under `output/<exam_stem>/<run_id>/`, a legacy cleaned scan in the exam folder, or a `*scan*.pdf` there |
 | `--force-clean-scan` | Ignore `cleaned_scan.pdf` cache and run full clean + deskew again (not combinable with `--skip-clean-scan`) |
 | `--rescaffold` | Delete scaffold cache before building (force re-parse) |
-| `--through-step N` | Exit after pipeline step `N` (1–16); see table below |
+| `--through-step N` | Exit after pipeline step `N` (1–17); see table below |
 | `--no-report` | Print results to terminal only; skip LaTeX/PDF |
 
 The same options (except `--version`) can be implied by the **natural-language prompt**: Kimi returns JSON with fields such as `folder_path`, `skip_clean_scan`, `through_step`, etc. **CLI flags combine with OR** for booleans (`--skip-clean-scan` or prompt says “skip cleaning”). **`--folder`** and **`--dpi`** and **`--through-step`** override the prompt when you pass them.
@@ -116,7 +116,7 @@ When you run `xscore.py`, it executes these steps in order:
 | 8. Detect page anchors | Template-matches IGCSE headers into the sidecar; skipped with `--skip-clean-scan` | `preprocessing/deskew.py` |
 | 9. Calculate transformation | Writes `cleaned_scan_transforms.json` (4-up ↔ scan similarity per page) when a matching four-up raw exam exists | `scaffold/project_boxes_on_scanned_exam.py` |
 | 10. Project bounding boxes | Debug PDF `cleaned_scan_projected_boxes.pdf` and `scan_projected_boxes.json` (exercise, eq-blank, and yellow rects per page) from transforms; skipped with `--skip-clean-scan` | `scaffold/project_boxes_on_scanned_exam.py` |
-| 11. Refine bounding boxes | Crops yellow margin strips from the scan, runs PaddleOCR PPStructureV3 (via `paddle_env` subprocess) to detect handwriting; writes `scan_handwriting_results.json` and `cleaned_scan_refined_boxes.pdf` (green = blank, red = handwriting); currently checks page 1 only | `scaffold/detect_handwriting.py`, `scaffold/paddle_worker.py` |
+| 11. Refine bounding boxes | For each yellow margin strip: (1) detects and removes printed vertical ruling lines (OpenCV morphology) to produce `cleaned_scan_yellow_cleaned.pdf`, then (2) runs PaddleOCR PPStructureV3 (via `paddle_env` subprocess) to check for handwriting. Writes `scan_handwriting_results.json` and `cleaned_scan_refined_boxes.pdf` (green = blank, red = handwriting). If handwriting is found beside an exercise box, the exercise box is expanded to absorb the margin strip; otherwise the margin box is discarded. Saves adjusted boxes to `scan_adjusted_exercise_boxes.json` and `cleaned_scan_adjusted_exercise.pdf` | `scaffold/detect_handwriting.py`, `scaffold/paddle_worker.py` |
 | 12. Detect student names | Kimi vision on each page; maps pages to roster entries | `marking/assign_pages_to_students.py` |
 | 13. Detect questions attempted | One Kimi call per page for attempted question numbers; used in step 14 to skip unanswered questions | `marking/detect_answered_questions.py` |
 | 14. Mark answers | Grades only attempted questions (`check_mc` / `check_answers` / `count_marks`; count_marks ignores step 13 filter) | `marking/grade_answers.py` |
@@ -212,7 +212,7 @@ shared/              models, exam_paths, terminal_ui, load_student_list, load_gr
 
 [`shared/terminal_ui.py`](shared/terminal_ui.py) formats `xscore.py` progress with compact step headers (single line). Set **`PIPELINE_DEBUG_AI=1`** to log truncated model responses (first 500 characters) to stderr via the `autograder.ai` logger for marking and extraction Kimi calls.
 
-### Import reference (steps 1–16)
+### Import reference (steps 1–17)
 
 Same order as [Pipeline steps](#pipeline-steps); paths are Python packages (run from repo root).
 
@@ -223,12 +223,13 @@ Same order as [Pipeline steps](#pipeline-steps); paths are Python packages (run 
 | 3 | `shared.load_student_list` | `read_student_list(...)` |
 | 4 | `scaffold.generate_scaffold` | `build_scaffold(...)` |
 | 5–10 | `preprocessing.start_scan` | `detect_blank_pages_phase`, `autorotate_phase`, `deskew_phase`, `detect_page_anchors_phase`, `compute_transformation_phase`, `project_bounding_boxes_phase`; or `cleanup_pdf(...)` |
-| 11 | `marking.assign_pages_to_students` | `assign_pages(...)` |
-| 12 | `marking.detect_answered_questions` | `detect_answered_exercises(...)` |
-| 13 | `marking.grade_answers` | `grade_students(...)` |
-| 14 | `reports.print_results` | `print_*` helpers |
-| 15 | `shared.load_ground_truth` | optional evaluation |
-| 16 | `reports.generate_report` | `generate_report(...)` |
+| 11 | `preprocessing.start_scan` + `scaffold.detect_handwriting` | `refine_bounding_boxes_phase(...)` |
+| 12 | `marking.assign_pages_to_students` | `assign_pages(...)` |
+| 13 | `marking.detect_answered_questions` | `detect_answered_exercises(...)` |
+| 14 | `marking.grade_answers` | `grade_students(...)` |
+| 15 | `reports.print_results` | `print_*` helpers |
+| 16 | `shared.load_ground_truth` | optional evaluation |
+| 17 | `reports.generate_report` | `generate_report(...)` |
 
 ### Vector PDF parsing
 
