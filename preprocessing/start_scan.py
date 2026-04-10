@@ -5,16 +5,16 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-# Phased pipeline artifacts (steps 5–10 scan block in xscore.py README).
+# Phased pipeline artifacts (steps 5–11 scan block in xscore.py README).
 SCAN_BLANKS_JSON = "scan_blanks.json"
 SCAN_ROTATED_PDF = "scan_rotated.pdf"
 CLEANED_SCAN_PDF = "cleaned_scan.pdf"
 CLEANED_SCAN_TRANSFORMS_JSON = "cleaned_scan_transforms.json"
+VLINES_REMOVED_SUFFIX = "_vertical_lines_removed.pdf"
 PROJECTED_BOXES_SUFFIX = "_projected_boxes.pdf"
 PROJECTED_BOXES_JSON = "scan_projected_boxes.json"
 REFINED_BOXES_SUFFIX = "_refined_boxes.pdf"
 HANDWRITING_RESULTS_JSON = "scan_handwriting_results.json"
-YELLOW_CLEANED_SUFFIX = "_yellow_cleaned.pdf"
 ADJUSTED_EXERCISE_JSON = "scan_adjusted_exercise_boxes.json"
 ADJUSTED_EXERCISE_SUFFIX = "_adjusted_exercise.pdf"
 
@@ -29,12 +29,12 @@ def _scan_phase_paths(artifact_dir: Path) -> dict[str, Path]:
         "sidecar": out.with_name(f"{out.stem}_anchors.json"),
         "sidecar_legacy": out.with_name(f"{out.stem}_reflines.json"),
         "deskew_tmp": ad / f"{out.stem}_deskew_tmp{out.suffix}",
-        "projected": out.with_name(out.stem + PROJECTED_BOXES_SUFFIX),
         "transforms": ad / CLEANED_SCAN_TRANSFORMS_JSON,
+        "vlines_removed": out.with_name(out.stem + VLINES_REMOVED_SUFFIX),
+        "projected": out.with_name(out.stem + PROJECTED_BOXES_SUFFIX),
         "projected_boxes_json": ad / PROJECTED_BOXES_JSON,
         "refined": out.with_name(out.stem + REFINED_BOXES_SUFFIX),
         "hw_results": ad / HANDWRITING_RESULTS_JSON,
-        "yellow_cleaned": out.with_name(out.stem + YELLOW_CLEANED_SUFFIX),
         "adjusted_exercise_json": ad / ADJUSTED_EXERCISE_JSON,
         "adjusted_exercise_pdf": out.with_name(out.stem + ADJUSTED_EXERCISE_SUFFIX),
     }
@@ -364,16 +364,48 @@ def project_bounding_boxes_phase(
         return None
 
 
+def remove_vertical_lines_phase(
+    folder: Path,  # noqa: ARG001  (kept for uniform phase signature)
+    artifact_dir: Path,
+    dpi: int,
+) -> Path:
+    """Step 10: remove printed vertical ruling lines from the full cleaned scan.
+
+    Reads ``cleaned_scan.pdf``, erases all detected vertical lines from every
+    page (left margin, centre, and right margin on both the top and bottom
+    halves — 6 lines per page), and writes the result to
+    ``cleaned_scan_vertical_lines_removed.pdf``.
+
+    Returns the path to the new PDF so the caller can update ``ctx.cleaned_pdf``.
+    """
+    from scaffold.detect_handwriting import remove_vertical_lines_pdf
+    from shared.terminal_ui import info_line, warn_line
+
+    paths = _scan_phase_paths(artifact_dir)
+    cleaned = paths["cleaned"]
+    vlines_removed = paths["vlines_removed"]
+
+    if not cleaned.is_file():
+        warn_line("No cleaned scan PDF — cannot remove vertical lines.")
+        raise FileNotFoundError(cleaned)
+
+    info_line("Removing vertical lines from full scan pages …")
+    remove_vertical_lines_pdf(cleaned, vlines_removed, dpi=dpi)
+    info_line(f"Saved {vlines_removed.name}")
+    return vlines_removed
+
+
 def refine_bounding_boxes_phase(
     folder: Path,
     artifact_dir: Path,
     dpi: int,
     *,
+    scan_pdf: Path | None = None,
     pages_to_check: tuple[int, ...] | None = None,
     ink_threshold: float = 0.0007,
     min_blob_size: int = 15,
 ) -> Path | None:
-    """Step 11: detect handwriting in yellow margin strips; draw red/green on refined PDF.
+    """Step 12: detect handwriting in yellow margin strips; draw red/green on refined PDF.
 
     Crops each yellow bbox from the deskewed scan, runs handwriting detection,
     then draws red (handwriting present) or green (blank) outlines on a copy of
@@ -397,7 +429,6 @@ def refine_bounding_boxes_phase(
         detect_handwriting_in_rects,
         overlay_refined_boxes,
         write_adjusted_exercise_pdf,
-        write_vlines_removed_pdf,
     )
     from scaffold.generate_scaffold import build_scaffold
     from scaffold.project_boxes_on_scanned_exam import (
@@ -412,16 +443,17 @@ def refine_bounding_boxes_phase(
     refined = paths["refined"]
     hw_json = paths["hw_results"]
     transforms_path = paths["transforms"]
-    cleaned = paths["cleaned"]
+    # Use the vline-removed PDF when provided (step 10 output); fall back to cleaned_scan.
+    scan_source = scan_pdf if scan_pdf is not None else paths["cleaned"]
 
     if not projected.is_file():
-        warn_line("No projected boxes PDF — run step 10 first.")
+        warn_line("No projected boxes PDF — run step 11 first.")
         return None
     if not transforms_path.is_file():
         warn_line("No transforms JSON — cannot compute yellow rects (run step 9 first).")
         return None
-    if not cleaned.is_file():
-        warn_line("No cleaned scan PDF — cannot rasterize pages.")
+    if not scan_source.is_file():
+        warn_line(f"Scan PDF not found ({scan_source.name}) — cannot rasterize pages.")
         return None
 
     try:
@@ -441,7 +473,7 @@ def refine_bounding_boxes_phase(
 
     page_results: dict[int, list[HWResult]] = {}
 
-    doc = fitz.open(str(cleaned))
+    doc = fitz.open(str(scan_source))
     for page_idx in pages_to_check:
         if page_idx >= len(page_entries) or page_idx >= len(doc):
             warn_line(f"Page {page_idx} out of range — skipping.")
@@ -455,7 +487,7 @@ def refine_bounding_boxes_phase(
             page, all_nodes, top_tf, bot_tf, px_to_pt=px_to_pt
         )
         hw_results = detect_handwriting_in_rects(
-            cleaned, page_idx, rects, dpi_used,
+            scan_source, page_idx, rects, dpi_used,
             ink_threshold=ink_threshold,
             min_blob_size=min_blob_size,
         )
@@ -479,14 +511,6 @@ def refine_bounding_boxes_phase(
 
     boxes_json = paths["projected_boxes_json"]
     if boxes_json.is_file():
-        write_vlines_removed_pdf(
-            cleaned,
-            boxes_json,
-            paths["yellow_cleaned"],
-            page_results,
-        )
-        info_line(f"Saved {paths['yellow_cleaned'].name}")
-
         # Compute adjusted exercise boxes: expand where handwriting found, else keep.
         import json as _json
         projected_payload = _json.loads(boxes_json.read_text())
@@ -511,9 +535,9 @@ def refine_bounding_boxes_phase(
         )
         info_line(f"Saved {paths['adjusted_exercise_json'].name}")
 
-        # Write PDF with only the adjusted exercise boxes on the cleaned scan
+        # Write PDF with only the adjusted exercise boxes on the scan
         write_adjusted_exercise_pdf(
-            cleaned,
+            scan_source,
             boxes_json,
             paths["adjusted_exercise_pdf"],
             adjusted_data,

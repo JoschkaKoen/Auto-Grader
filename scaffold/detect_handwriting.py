@@ -210,6 +210,48 @@ def _erase_vertical_lines_from_crop(crop_bgr: np.ndarray) -> np.ndarray:
     return result
 
 
+def remove_vertical_lines_pdf(
+    scan_pdf: Path, output_pdf: Path, *, dpi: int = 300
+) -> Path:
+    """Rasterise every page of *scan_pdf*, erase all structural vertical lines,
+    and write the result to *output_pdf*.
+
+    Unlike *write_vlines_removed_pdf*, which only erases lines inside yellow
+    margin strips, this function processes the full page image so that all 6
+    structural ruling lines (left margin, centre, right margin on both the top
+    and bottom halves of a 4-up scan) are removed in one pass.
+
+    Atomic write: saves to a temp file first, then replaces *output_pdf*.
+    """
+    doc_in = fitz.open(str(scan_pdf))
+    doc_out = fitz.open()
+    try:
+        for page_in in doc_in:
+            mat = fitz.Matrix(dpi / 72, dpi / 72)
+            pix = page_in.get_pixmap(matrix=mat, colorspace=fitz.csRGB)
+            img = np.frombuffer(pix.samples, dtype=np.uint8).reshape(
+                pix.height, pix.width, 3
+            )
+            img_bgr = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+            img_bgr = _erase_vertical_lines_from_crop(img_bgr)
+            img_rgb = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB)
+            _, jpg_bytes = cv2.imencode(
+                ".jpg", img_rgb, [cv2.IMWRITE_JPEG_QUALITY, 95]
+            )
+            page_out = doc_out.new_page(
+                width=page_in.rect.width, height=page_in.rect.height
+            )
+            page_out.insert_image(page_out.rect, stream=jpg_bytes.tobytes())
+
+        tmp = output_pdf.with_suffix(".tmp.pdf")
+        doc_out.save(str(tmp), garbage=4, deflate=True)
+    finally:
+        doc_in.close()
+        doc_out.close()
+    tmp.replace(output_pdf)
+    return output_pdf
+
+
 def write_vlines_removed_pdf(
     scan_pdf: Path,
     projected_boxes_json: Path,
